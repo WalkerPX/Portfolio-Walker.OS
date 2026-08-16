@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philosophy</title>
+<style>
+  :root { --crimson:#990000; --cream:#F5EFE0; }
+  * { margin:0; box-sizing:border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: var(--cream); color: var(--crimson);
+         display:flex; align-items:center; justify-content:center; min-height:100vh; padding:18px; }
+  .card { background:#fffdf7; border:1px solid rgba(153,0,0,.25); border-radius:16px; padding:24px 26px;
+          max-width:480px; box-shadow:0 6px 20px rgba(153,0,0,.08); text-align:center; }
+  .q { font-size:18px; line-height:1.55; font-style:italic; }
+  .q::before{content:"\201C";} .q::after{content:"\201D";}
+  .a { margin-top:14px; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; opacity:.75; }
+  .btn { margin-top:16px; background:var(--crimson); color:var(--cream); border:none; border-radius:999px;
+         padding:8px 18px; font-family:inherit; font-size:12px; letter-spacing:1px; cursor:pointer; }
+  .btn:hover{opacity:.9}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="q" id="q">\u2026</div>
+    <div class="a" id="a"></div>
+    <button class="btn" onclick="loadQ()">\u21bb New quote</button>
+  </div>
+<script>
+const FALLBACK = [
+ {q:"The unexamined life is not worth living.", a:"Socrates"},
+ {q:"We suffer more often in imagination than in reality.", a:"Seneca"},
+ {q:"He who has a why to live can bear almost any how.", a:"Friedrich Nietzsche"},
+ {q:"The happiness of your life depends upon the quality of your thoughts.", a:"Marcus Aurelius"},
+ {q:"Knowing yourself is the beginning of all wisdom.", a:"Aristotle"},
+ {q:"It does not matter how slowly you go as long as you do not stop.", a:"Confucius"},
+ {q:"The only true wisdom is in knowing you know nothing.", a:"Socrates"},
+ {q:"Man is condemned to be free.", a:"Jean-Paul Sartre"},
+ {q:"Life must be understood backwards. But it must be lived forwards.", a:"S\u00f8ren Kierkegaard"},
+ {q:"The wound is the place where the Light enters you.", a:"Rumi"}
+];
+async function loadQ(){
+  try{
+    const r = await fetch('https://api.quotable.io/random?maxLength=180');
+    const d = await r.json();
+    if(d && d.content){ setQ(d.content, d.author); return; }
+  }catch(e){}
+  const pick = FALLBACK[Math.floor(Math.random()*FALLBACK.length)];
+  setQ(pick.q, pick.a);
+}
+function setQ(q,a){ document.getElementById('q').textContent=q; document.getElementById('a').textContent='\u2014 '+(a||'Unknown'); }
+loadQ();
+</script>
+</body>
+</html>
