@@ -35,7 +35,7 @@
 </head>
 <body>
   <div class="chat">
-    <div class="hd"><span class="tr">🔱</span><b>Joi — Secretary</b><span id="ver">v3</span></div>
+    <div class="hd"><span class="tr">🔱</span><b>Joi — Secretary</b><span id="ver">v4</span></div>
     <div class="msgs" id="msgs"></div>
     <div class="err" id="err"></div>
     <div class="in">
@@ -81,7 +81,7 @@ async function send(){
     const headers = {'Content-Type':'application/json'};
     if(KEY) headers['Authorization'] = 'Bearer ' + KEY;
     if(sessionId) headers['X-Hermes-Session-Id'] = sessionId;
-    const r = await fetch(API_BASE + '/v1/chat/completions', {
+    const r = await fetch(API_BASE + '/v1/chat/completions?_=' + Date.now(), {
       method:'POST', headers, body: JSON.stringify({
         model:'hermes-agent',
         messages:[{role:'user', content:text}]
