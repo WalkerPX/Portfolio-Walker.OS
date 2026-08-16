@@ -45,7 +45,7 @@
   </div>
 <script>
 const params = new URLSearchParams(location.search);
-const API_BASE = params.get('api') || 'https://truenas.tail94e08b.ts.net';
+const API_BASE = params.get('api') || 'https://truenas.tail94e08b.ts.net:8443';
 const KEY = params.get('key') || '';
 const LS = 'joi-chat-session';
 let sessionId = localStorage.getItem(LS) || null;
