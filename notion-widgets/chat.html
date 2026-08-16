@@ -35,7 +35,7 @@
 </head>
 <body>
   <div class="chat">
-    <div class="hd"><span class="tr">🔱</span><b>Joi — Secretary</b><span>online</span></div>
+    <div class="hd"><span class="tr">🔱</span><b>Joi — Secretary</b><span id="ver">v3</span></div>
     <div class="msgs" id="msgs"></div>
     <div class="err" id="err"></div>
     <div class="in">
@@ -96,7 +96,7 @@ async function send(){
     addMsg(reply, 'j');
   }catch(e){
     setTyping(false);
-    errBox.textContent = 'Error: ' + e.message + (KEY ? '' : ' (no key — add ?key= to the embed URL)');
+    errBox.textContent = 'Error: ' + e.message + ' [' + API_BASE + ']' + (KEY ? '' : ' (no key — add ?key= to the embed URL)');
     errBox.style.display = 'block';
   }finally{
     sendBtn.disabled = false;
