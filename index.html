@@ -24,6 +24,7 @@
       --accent: #8CB4FF;
       --accent-dim: #6B9FFF;
       --accent-rgb: 107,159,255;
+      --tint-rgb: 107,159,255;
       --accent-glow: rgba(var(--accent-rgb),0.3);
       --text: #F0F4FF;
       --text-dim: #C0C8E0;
@@ -145,13 +146,13 @@
       width:36px;height:36px;
       display:flex;align-items:center;justify-content:center;
       border-radius:var(--radius-sm);
-      background:rgba(var(--accent-rgb),.06);
+      background:rgba(var(--tint-rgb),.06);
       border:1px solid rgba(var(--accent-rgb),.1);
       color:var(--accent);font-weight:700;font-size:16px;font-family:var(--font-ui);
       cursor:pointer;transition:all .15s ease;flex-shrink:0
     }
-    .tb-start:hover{background:rgba(var(--accent-rgb),.14);box-shadow:0 0 16px rgba(var(--accent-rgb),.08)}
-    .tb-div{width:1px;height:26px;background:rgba(var(--accent-rgb),.1);margin:0 8px;flex-shrink:0}
+    .tb-start:hover{background:rgba(var(--tint-rgb),.14);box-shadow:0 0 16px rgba(var(--accent-rgb),.08)}
+    .tb-div{width:1px;height:26px;background:rgba(var(--tint-rgb),.1);margin:0 8px;flex-shrink:0}
     .tb-apps{display:flex;gap:2px;flex:1;padding:0 4px;align-items:center;overflow-x:auto}
     .tb-apps::-webkit-scrollbar{height:0}
     .tb-app{
@@ -162,8 +163,8 @@
       cursor:pointer;position:relative;
       transition:all .12s ease
     }
-    .tb-app:hover{border-color:rgba(var(--accent-rgb),.1);background:rgba(var(--accent-rgb),.05)}
-    .tb-app.on{background:rgba(var(--accent-rgb),.08);border-color:rgba(var(--accent-rgb),.1)}
+    .tb-app:hover{border-color:rgba(var(--accent-rgb),.1);background:rgba(var(--tint-rgb),.05)}
+    .tb-app.on{background:rgba(var(--tint-rgb),.08);border-color:rgba(var(--accent-rgb),.1)}
     .tb-app.on::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:2px;background:var(--accent);border-radius:1px}
     .tb-app img{width:22px;height:22px;object-fit:contain;transition:transform .15s ease;pointer-events:none}
     .tb-app:hover img{transform:scale(1.25)}
@@ -217,8 +218,8 @@
       cursor:pointer;font:11px/1 var(--font-ui);color:var(--text-dim);
       transition:all .12s ease;position:relative
     }
-    .mx-tabs .mt:hover{background:rgba(var(--accent-rgb),.05)}
-    .mx-tabs .mt.on{background:rgba(var(--accent-rgb),.08);color:var(--text)}
+    .mx-tabs .mt:hover{background:rgba(var(--tint-rgb),.05)}
+    .mx-tabs .mt.on{background:rgba(var(--tint-rgb),.08);color:var(--text)}
     .mx-tabs .mt .mti{font-size:13px}
     .mx-tabs .mt img{width:14px;height:14px;object-fit:contain;pointer-events:none}
     .mx-tabs .mt .mtc{
@@ -276,7 +277,7 @@
       padding:3px 8px;border-radius:4px;opacity:.6;
       transition:all .12s ease;white-space:nowrap;letter-spacing:.3px
     }
-    .w-tb .tt .tb-gallery-link:hover{opacity:1;background:rgba(var(--accent-rgb),.08)}
+    .w-tb .tt .tb-gallery-link:hover{opacity:1;background:rgba(var(--tint-rgb),.08)}
     .w-tb .tt .ico{font-size:13px}
 
     /* Resize handle */
@@ -300,8 +301,8 @@
     }
     .w-bd::-webkit-scrollbar{width:4px}
     .w-bd::-webkit-scrollbar-track{background:transparent}
-    .w-bd::-webkit-scrollbar-thumb{background:rgba(var(--accent-rgb),.1);border-radius:2px}
-    .w-bd::-webkit-scrollbar-thumb:hover{background:rgba(var(--accent-rgb),.2)}
+    .w-bd::-webkit-scrollbar-thumb{background:rgba(var(--tint-rgb),.1);border-radius:2px}
+    .w-bd::-webkit-scrollbar-thumb:hover{background:rgba(var(--tint-rgb),.2)}
 
     .w-bd h2{font-size:17px;font-weight:600;color:var(--text);margin-bottom:3px}
     .w-bd .st{font-size:11px;color:var(--accent);font-weight:400;margin-bottom:16px;font-family:var(--font-ui);letter-spacing:.5px}
@@ -315,7 +316,7 @@
     .w-bd .bg{
       display:inline-block;padding:2px 9px;border-radius:4px;
       font-size:10px;font-family:var(--font-ui);
-      background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.08);
+      background:rgba(var(--tint-rgb),.06);border:1px solid rgba(var(--accent-rgb),.08);
       color:var(--accent);margin-right:3px;margin-bottom:3px
     }
 
@@ -335,12 +336,12 @@
       padding:5px 13px;border-radius:var(--radius-sm);
       font-size:11px;font-weight:500;cursor:pointer;
       border:1px solid rgba(var(--accent-rgb),.12);
-      background:rgba(var(--accent-rgb),.05);color:var(--accent);
+      background:rgba(var(--tint-rgb),.05);color:var(--accent);
       transition:all .15s ease;text-decoration:none;font-family:var(--font-ui)
     }
-    .btn:hover{background:rgba(var(--accent-rgb),.1);border-color:rgba(var(--accent-rgb),.2)}
-    .btn-p{background:rgba(var(--accent-rgb),.1);border-color:rgba(var(--accent-rgb),.16)}
-    .btn-p:hover{background:rgba(var(--accent-rgb),.18);box-shadow:0 0 14px rgba(var(--accent-rgb),.06)}
+    .btn:hover{background:rgba(var(--tint-rgb),.1);border-color:rgba(var(--accent-rgb),.2)}
+    .btn-p{background:rgba(var(--tint-rgb),.1);border-color:rgba(var(--accent-rgb),.16)}
+    .btn-p:hover{background:rgba(var(--tint-rgb),.18);box-shadow:0 0 14px rgba(var(--accent-rgb),.06)}
 
     /* Gallery */
     .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
@@ -369,7 +370,7 @@
       background:rgba(255,255,255,.015);border:1px solid rgba(var(--accent-rgb),.05);
       cursor:pointer;transition:all .15s ease;text-decoration:none;color:inherit
     }
-    .lc:hover{background:rgba(var(--accent-rgb),.04);border-color:rgba(var(--accent-rgb),.12);transform:translateY(-1px)}
+    .lc:hover{background:rgba(var(--tint-rgb),.04);border-color:rgba(var(--accent-rgb),.12);transform:translateY(-1px)}
     .lc .li{width:34px;height:34px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
     .lc .li2 h4{font-size:12px;font-weight:500;color:var(--text);margin-bottom:1px}
     .lc .li2 span{font-size:10px;color:var(--text-muted);font-family:var(--font-ui)}
@@ -483,9 +484,9 @@
     .mp-lead{font-family:var(--font-ui);font-size:12px;color:var(--text-muted);margin-bottom:30px}
     .mp-row{display:flex;gap:26px;justify-content:center;flex-wrap:wrap}
     .mp-card{width:196px;padding:20px 16px 18px;border-radius:16px;cursor:pointer;
-      background:rgba(var(--accent-rgb),.035);border:1px solid rgba(var(--accent-rgb),.12);
+      background:rgba(var(--tint-rgb),.035);border:1px solid rgba(var(--accent-rgb),.12);
       transition:transform .22s ease,border-color .22s ease,background .22s ease,box-shadow .22s ease}
-    .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
+    .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--tint-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
     .mp-card[data-mode="creative"]:hover{border-color:#cf3a33;
@@ -518,7 +519,7 @@
       backdrop-filter:blur(8px)}
     .ms-btn img{width:28px;height:28px;object-fit:contain}
     .ms-btn:hover{opacity:.9}
-    .ms-btn.on{opacity:1;border-color:var(--accent);background:rgba(var(--accent-rgb),.14);
+    .ms-btn.on{opacity:1;border-color:var(--accent);background:rgba(var(--tint-rgb),.14);
       box-shadow:0 0 0 1px rgba(var(--accent-rgb),.55),0 0 16px rgba(var(--accent-rgb),.3)}
     .ms-glyph{display:none;font-size:15px;font-weight:700;color:var(--accent);font-family:var(--font-ui)}
     .ms-btn.noimg .ms-glyph{display:block}
@@ -541,6 +542,7 @@
       --accent:#cf3a33;
       --accent-dim:#9e1b24;
       --accent-rgb:207,58,51;
+      --tint-rgb:246,237,218;
       --accent-glow:rgba(207,58,51,.26);
       --text:#f6edda;
       --text-dim:#d9c9b4;
@@ -572,6 +574,7 @@
       --accent:#d9b96a;
       --accent-dim:#c9a227;
       --accent-rgb:201,162,39;
+      --tint-rgb:201,162,39;
       --accent-glow:rgba(201,162,39,.26);
       --text:#f4f1e9;
       --text-dim:#cdc7b8;
@@ -869,7 +872,7 @@
         <div class="fl"><label>Message</label><textarea placeholder="Like what you see? Let's connect."></textarea></div>
         <button class="btn btn-p" style="align-self:flex-start;padding:7px 18px;cursor:pointer" onclick="alert('📨 Message sent!\n\n(Demo — email walker.birchfield03@gmail.com)')">Send →</button>
       </div>
-      <div style="margin-top:14px;padding:10px 12px;border-radius:var(--radius-sm);background:rgba(var(--accent-rgb),.03);border:1px solid rgba(var(--accent-rgb),.05);font-size:10px;color:var(--text-muted);font-family:var(--font-ui)">
+      <div style="margin-top:14px;padding:10px 12px;border-radius:var(--radius-sm);background:rgba(var(--tint-rgb),.03);border:1px solid rgba(var(--accent-rgb),.05);font-size:10px;color:var(--text-muted);font-family:var(--font-ui)">
         Or email: <a href="mailto:walker.birchfield03@gmail.com" style="color:var(--accent);text-decoration:none">walker.birchfield03@gmail.com</a>
       </div>
     </div>
