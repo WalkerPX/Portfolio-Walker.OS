@@ -464,6 +464,57 @@
       .w-bd{padding:10px}
       .gg{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:5px}
     }
+    /* ===== MODE SPLIT: creative / professional ===== */
+    .m-creative,.m-professional{display:none}
+    body[data-mode="creative"] .m-creative{display:block}
+    body[data-mode="professional"] .m-professional{display:block}
+
+    /* first-run workspace picker */
+    #modePicker{position:fixed;inset:0;z-index:900;display:none;align-items:center;justify-content:center;
+      background:radial-gradient(circle at 50% 38%,#0b1524 0%,#05080f 68%);}
+    #modePicker.show{display:flex}
+    .mp-inner{text-align:center;padding:20px}
+    .mp-kicker{font-family:var(--font-ui);font-size:10px;letter-spacing:3px;color:var(--accent);opacity:.8;text-transform:uppercase}
+    .mp-title{font-size:34px;font-weight:700;color:var(--text);letter-spacing:-.5px;margin:6px 0 2px}
+    .mp-lead{font-family:var(--font-ui);font-size:12px;color:var(--text-muted);margin-bottom:30px}
+    .mp-row{display:flex;gap:26px;justify-content:center;flex-wrap:wrap}
+    .mp-card{width:196px;padding:20px 16px 18px;border-radius:16px;cursor:pointer;
+      background:rgba(107,159,255,.035);border:1px solid rgba(107,159,255,.12);
+      transition:transform .22s ease,border-color .22s ease,background .22s ease,box-shadow .22s ease}
+    .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(107,159,255,.08);
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(107,159,255,.25)}
+    .mp-card.pre{border-color:rgba(107,159,255,.45)}
+    .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
+      display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(160deg,#12233a,#08111c);border:1px solid rgba(107,159,255,.16)}
+    .mp-tile img{width:100%;height:100%;object-fit:cover}
+    .mp-glyph{display:none;font-size:38px;font-weight:700;color:var(--accent);font-family:var(--font-ui)}
+    .mp-tile.noimg .mp-glyph{display:block}
+    .mp-name{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+    .mp-desc{font-family:var(--font-ui);font-size:10px;letter-spacing:.4px;color:var(--text-muted);line-height:1.6}
+    .mp-hint{margin-top:26px;font-family:var(--font-ui);font-size:10px;letter-spacing:.6px;color:var(--text-muted);opacity:.7}
+
+    /* in-OS workspace switcher (top left) */
+    #modeSwitch{position:fixed;top:10px;left:10px;z-index:780;display:none;gap:7px}
+    #modeSwitch.show{display:flex}
+    .ms-btn{width:42px;height:42px;border-radius:12px;cursor:pointer;overflow:hidden;
+      display:flex;align-items:center;justify-content:center;
+      background:rgba(9,17,27,.72);border:1px solid rgba(107,159,255,.14);
+      opacity:.5;transition:opacity .2s ease,border-color .2s ease,box-shadow .2s ease,background .2s ease;
+      backdrop-filter:blur(8px)}
+    .ms-btn img{width:28px;height:28px;object-fit:contain}
+    .ms-btn:hover{opacity:.9}
+    .ms-btn.on{opacity:1;border-color:var(--accent);background:rgba(107,159,255,.14);
+      box-shadow:0 0 0 1px rgba(107,159,255,.55),0 0 16px rgba(107,159,255,.3)}
+    .ms-glyph{display:none;font-size:15px;font-weight:700;color:var(--accent);font-family:var(--font-ui)}
+    .ms-btn.noimg .ms-glyph{display:block}
+    @media(max-width:640px){
+      .mp-card{width:150px;padding:16px 12px}
+      .mp-tile{width:82px;height:82px;border-radius:19px}
+      .mp-title{font-size:26px}
+      #modeSwitch{top:6px;left:6px;gap:5px}
+      .ms-btn{width:36px;height:36px}
+    }
   </style>
 </head>
 <body>
@@ -508,6 +559,16 @@
   <div class="wp"></div>
   <div class="grid"></div>
 
+  <!-- ===== WORKSPACE SWITCHER (top left) ===== -->
+  <div id="modeSwitch">
+    <div class="ms-btn" data-mode-btn="creative" onclick="setMode('creative')" title="Creative workspace">
+      <img src="assets/creative-logo.png" alt="Creative" onerror="imgFallback(this)" /><span class="ms-glyph">C</span>
+    </div>
+    <div class="ms-btn" data-mode-btn="professional" onclick="setMode('professional')" title="Professional workspace">
+      <img src="assets/professional-logo.png" alt="Professional" onerror="imgFallback(this)" /><span class="ms-glyph">P</span>
+    </div>
+  </div>
+
   <!-- ===== WINDOWS ===== -->
 
   <!-- ABOUT -->
@@ -523,39 +584,65 @@
     <div class="w-bd">
       <div class="about-layout">
         <div class="about-text">
-          <h2>Walker Birchfield</h2>
-          <div class="st">Juris Doctor Candidate · Indiana University McKinney School of Law</div>
-          <p>Hello and thank you for visiting my webpage. My name is Walker Birchfield and I'm excited to share my portfolio with you.</p>
-          <p>I graduated from Purdue University in May 2026 with a bachelor's degree in History, a minor in IT, and a certificate in Cornerstone. Throughout my time there, I developed a deep passion for research, development, digital media, creative content, and sports. It's a combination that continues to drive my work today.</p>
-          <div class="hr"></div>
-          <p>I currently work for Purdue Athletics in the Ross-Ade Brigade, the official student section for Purdue Football, where I serve as Creative Director. Previously, I worked for the Lafayette Aviators, a summer collegiate baseball team competing in the Prospect League, also serving as Creative Director.</p>
-          <p>From Purdue, I began my law journey at Indiana University–McKinney School of Law, where I am now a Juris Doctor Candidate. I came to law school with a clear focus: sports law, built on the athletics, media, and creative work I did in West Lafayette. I am also a member of the Sports and Entertainment Law Society, where I work alongside classmates who share that same interest in the business and legal side of athletics.</p>
-          <p>My goal is to combine my legal education with my sports background to keep working in athletics, with an emphasis on sports law, name/image/likeness, and player representation.</p>
-          <div class="hr"></div>
+
+          <!-- CREATIVE ABOUT -->
+          <div class="m-creative">
+            <h2>Walker Birchfield</h2>
+            <div class="st">Creative Director &middot; Photography &amp; Design</div>
+            <p>Hello and thank you for visiting my webpage. My name is Walker Birchfield and I'm excited to share my creative work with you.</p>
+            <p>I graduated from Purdue University in May 2026 with a bachelor's degree in History, a minor in IT, and a certificate in Cornerstone. Throughout my time there, I developed a deep passion for research, development, digital media, creative content, and sports. It's a combination that continues to drive my work today.</p>
+            <div class="hr"></div>
+            <p>I work for Purdue Athletics in the Ross-Ade Brigade, the official student section for Purdue Football, where I serve as Creative Director. Previously, I worked for the Lafayette Aviators, a summer collegiate baseball team competing in the Prospect League, also serving as Creative Director.</p>
+            <p>My work lives where sport meets storytelling &mdash; gameday graphics, photography, video, and social content built to be seen in the moment and remembered after it.</p>
+            <div class="hr"></div>
+          </div>
+
+          <!-- PROFESSIONAL ABOUT -->
+          <div class="m-professional">
+            <h2>Walker Birchfield</h2>
+            <div class="st">Juris Doctor Candidate &middot; Indiana University McKinney School of Law</div>
+            <p>Hello and thank you for visiting my webpage. My name is Walker Birchfield and I'm excited to share my professional work with you.</p>
+            <p>I graduated from Purdue University in May 2026 with a bachelor's degree in History, a minor in IT, and a certificate in Cornerstone. Throughout my time there, I developed a deep passion for research, writing, digital media, and sports &mdash; a combination that shaped where I wanted to take my career.</p>
+            <div class="hr"></div>
+            <p>From Purdue, I began my law journey at Indiana University&ndash;McKinney School of Law, where I am now a Juris Doctor Candidate. I came to law school with a clear focus: sports law, built on the athletics, media, and creative work I did in West Lafayette. I am also a member of the Sports and Entertainment Law Society, where I work alongside classmates who share that same interest in the business and legal side of athletics.</p>
+            <p>My goal is to combine my legal education with my sports background to keep working in athletics, with an emphasis on sports law, name/image/likeness, and player representation.</p>
+            <div class="hr"></div>
+          </div>
+
         </div>
         <div class="about-photo">
           <img src="assets/headshot.jpg" alt="Walker Birchfield" />
         </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
-        <span class="bg">Purdue University</span>
-        <span class="bg">History</span>
-        <span class="bg">IT Minor</span>
-        <span class="bg">IU McKinney School of Law</span>
-        <span class="bg">Juris Doctor Candidate</span>
-        <span class="bg">Sports &amp; Entertainment Law Society</span>
-        <span class="bg">Creative Direction</span>
-        <span class="bg">Photography</span>
-        <span class="bg">Sports Media</span>
-        <span class="bg">Video Production</span>
-        <span class="bg">Class of '26</span>
+      <div class="m-creative">
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+          <span class="bg">Purdue University</span>
+          <span class="bg">History</span>
+          <span class="bg">IT Minor</span>
+          <span class="bg">Creative Direction</span>
+          <span class="bg">Photography</span>
+          <span class="bg">Sports Media</span>
+          <span class="bg">Video Production</span>
+          <span class="bg">Class of '26</span>
+        </div>
+      </div>
+      <div class="m-professional">
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+          <span class="bg">Purdue University</span>
+          <span class="bg">IU McKinney School of Law</span>
+          <span class="bg">Juris Doctor Candidate</span>
+          <span class="bg">Sports &amp; Entertainment Law Society</span>
+          <span class="bg">Sports Law</span>
+          <span class="bg">History</span>
+          <span class="bg">Class of '26</span>
+        </div>
       </div>
     </div>
     <div class="w-rs" onmousedown="resizeStart(event,'w-about')"></div>
   </div>
 
   <!-- WORK -->
-  <div class="w" id="w-work" style="width:440px;top:75px;right:70px;max-height:68vh">
+  <div class="w" id="w-work" data-modes="professional" style="width:440px;top:75px;right:70px;max-height:68vh">
     <div class="w-tb" onmousedown="dragStart(event,'w-work')">
       <div class="d">
         <div class="dt c" onclick="closeWin('work')"></div>
@@ -591,7 +678,7 @@
   </div>
 
   <!-- GALLERY -->
-  <div class="w" id="w-gallery" style="width:600px;top:85px;left:90px;max-height:73vh">
+  <div class="w" id="w-gallery" data-modes="creative" style="width:600px;top:85px;left:90px;max-height:73vh">
     <div class="w-tb" onmousedown="dragStart(event,'w-gallery')">
       <div class="d">
         <div class="dt c" onclick="closeWin('gallery')"></div>
@@ -697,11 +784,11 @@
     <div class="tb-start" id="tbStart" onclick="toggleStart()">W</div>
     <div class="tb-div"></div>
     <div class="tb-apps" id="tbApps">
-      <div class="tb-app" data-app="about" onclick="toggleWin('about')"><img src="assets/AboutIcon.png" alt="About" /></div>
-      <div class="tb-app" data-app="work" onclick="toggleWin('work')"><img src="assets/WorkIcon.png" alt="Work" /></div>
-      <div class="tb-app" data-app="gallery" onclick="toggleWin('gallery')"><img src="assets/GalleryIcon.png" alt="Gallery" /></div>
-      <div class="tb-app" data-app="contact" onclick="toggleWin('contact')"><img src="assets/ContactIcon.png" alt="Contact" /></div>
-      <div class="tb-app" data-app="links" onclick="toggleWin('links')"><img src="assets/LinksIcon.png" alt="Links" /></div>
+      <div class="tb-app" data-app="about" data-modes="both" onclick="toggleWin('about')"><img src="assets/AboutIcon.png" alt="About" /></div>
+      <div class="tb-app" data-app="work" data-modes="professional" onclick="toggleWin('work')"><img src="assets/WorkIcon.png" alt="Work" /></div>
+      <div class="tb-app" data-app="gallery" data-modes="creative" onclick="toggleWin('gallery')"><img src="assets/GalleryIcon.png" alt="Gallery" /></div>
+      <div class="tb-app" data-app="contact" data-modes="both" onclick="toggleWin('contact')"><img src="assets/ContactIcon.png" alt="Contact" /></div>
+      <div class="tb-app" data-app="links" data-modes="both" onclick="toggleWin('links')"><img src="assets/LinksIcon.png" alt="Links" /></div>
     </div>
     <div class="tb-ttip" id="tbTtip"></div>
     <div class="tb-tray">
@@ -710,6 +797,28 @@
       <span class="ti" title="Shut Down" onclick="powerOff()">⏻</span>
       <span class="tb-clock" id="clock"></span>
     </div>
+  </div>
+</div>
+
+<!-- ===== WORKSPACE PICKER (first load) ===== -->
+<div id="modePicker">
+  <div class="mp-inner">
+    <div class="mp-kicker">Walker.OS v3.0.1</div>
+    <div class="mp-title">Choose your workspace</div>
+    <div class="mp-lead">Two systems, one machine. You can switch anytime from the top left.</div>
+    <div class="mp-row">
+      <div class="mp-card" data-mode="creative" onclick="chooseMode('creative')">
+        <div class="mp-tile"><img src="assets/creative-logo.png" alt="Creative" onerror="imgFallback(this)" /><span class="mp-glyph">C</span></div>
+        <div class="mp-name">Creative</div>
+        <div class="mp-desc">Photography &middot; Design &middot; Creative Direction</div>
+      </div>
+      <div class="mp-card" data-mode="professional" onclick="chooseMode('professional')">
+        <div class="mp-tile"><img src="assets/professional-logo.png" alt="Professional" onerror="imgFallback(this)" /><span class="mp-glyph">P</span></div>
+        <div class="mp-name">Professional</div>
+        <div class="mp-desc">R&eacute;sum&eacute; &middot; Writing &middot; Law</div>
+      </div>
+    </div>
+    <div class="mp-hint">creative &middot; professional</div>
   </div>
 </div>
 
@@ -760,7 +869,7 @@
     {t:'  [  OK  ]  education.cert        ',c:'ok'},
     {t:'  [  OK  ]  contact.interface     ',c:'ok'},
     {t:'',c:''},
-    {t:'  [USER] Walker Birchfield — Purdue \'26',c:'hl'},
+    {t:'  [USER] Walker Birchfield — Purdue \'26 · IU McKinney J.D.',c:'hl'},
     {t:'',c:''},
     {t:'  [BOOT] System ready in 0.47s',c:'ok'},
     {t:'  [LAUNCH] Starting user interface...',c:'ac'}
@@ -795,8 +904,8 @@
           document.getElementById('desktop').classList.add('in')
           S.booted=true
           document.addEventListener('keydown',kbd)
-          // Restore windows from gallery return, or auto-open About
-          setTimeout(()=>{toggleWin('about')},500)
+          // Two workspaces: let the visitor pick instead of auto-opening About
+          showModePicker()
         },300)
       },600)
     }
@@ -940,6 +1049,82 @@
     S.ow[id] = true
   }
 
+
+  // ===== WORKSPACES: creative / professional =====
+  // Each mode is its own OS instance: its own desktop icons, its own windows,
+  // its own About copy. The picker at boot chooses one; the top-left switcher
+  // swaps between them without reloading.
+  const MODE_LABELS={creative:'Creative',professional:'Professional'}
+  let MODE=null
+
+  function imgFallback(img){
+    if(!img)return
+    const box=img.parentNode
+    if(box)box.classList.add('noimg')
+    img.style.display='none'
+  }
+
+  function modeAllows(el,m){
+    const ms=(el && el.dataset && el.dataset.modes || 'both').split(',')
+    return ms.includes('both') || ms.includes(m)
+  }
+
+  function applyMode(m){
+    if(!MODE_LABELS[m])m='creative'
+    MODE=m
+    document.body.setAttribute('data-mode',m)
+    // desktop icons for this instance only
+    document.querySelectorAll('.tb-app').forEach(a=>{
+      a.style.display=modeAllows(a,m)?'':'none'
+    })
+    // close any window that does not belong to the new instance
+    document.querySelectorAll('#desktop .w[data-modes]').forEach(w=>{
+      if(!modeAllows(w,m)){
+        const n=w.id.replace('w-','')
+        if(n in S.ow)closeWin(n)
+      }
+    })
+    // highlight the active instance
+    document.querySelectorAll('[data-mode-btn]').forEach(b=>{
+      const on=b.dataset.modeBtn===m
+      b.classList.toggle('on',on)
+      b.setAttribute('aria-pressed',on?'true':'false')
+    })
+    document.querySelectorAll('.mp-card').forEach(c=>c.classList.toggle('pre',c.dataset.mode===m))
+    try{localStorage.setItem('wos_mode',m)}catch(e){}
+    updateTB();updateMxTabs()
+  }
+
+  function chooseMode(m){
+    applyMode(m)
+    const p=document.getElementById('modePicker')
+    if(p)p.classList.remove('show')
+    const sw=document.getElementById('modeSwitch')
+    if(sw)sw.classList.add('show')
+    // a small welcome: open the instance's home window
+    setTimeout(()=>{toggleWin(m==='creative'?'gallery':'work')},420)
+  }
+
+  function setMode(m){
+    if(m===MODE)return
+    const dm=document.getElementById('modePicker')
+    if(dm&&dm.classList.contains('show')){chooseMode(m);return}
+    applyMode(m)
+    // land in the new instance's home window
+    setTimeout(()=>{toggleWin(m==='creative'?'gallery':'work')},260)
+  }
+
+  function showModePicker(){
+    const p=document.getElementById('modePicker')
+    const sw=document.getElementById('modeSwitch')
+    if(sw)sw.classList.add('show')
+    if(p)p.classList.add('show')
+    try{
+      const saved=localStorage.getItem('wos_mode')
+      if(saved)document.querySelectorAll('.mp-card').forEach(c=>c.classList.toggle('pre',c.dataset.mode===saved))
+    }catch(e){}
+  }
+
   // ===== WINDOW MANAGEMENT =====
   const WINS={about:'About',work:'Work',gallery:'Gallery',links:'Links',contact:'Contact',preview:'Preview'}
   const WINPOS={about:'width:500px;top:50px;left:calc(50% - 250px);max-height:76vh',
@@ -952,6 +1137,7 @@
   function toggleWin(name){
     const el=document.getElementById('w-'+name)
     if(!el)return
+    if(MODE&&!modeAllows(el,MODE))return
     if(el.classList.contains('o')){focusWin(name);return}
     const ico=iconRect(name)
     if(!ico)return
@@ -1135,6 +1321,8 @@
       startOpen=true
       // Open all that aren't open yet
       Object.keys(WINS).forEach((n,i)=>setTimeout(()=>{
+        const el=document.getElementById('w-'+n)
+        if(el&&MODE&&!modeAllows(el,MODE))return
         if(!(n in S.ow))toggleWin(n)
       },i*60))
       setTimeout(()=>startOpen=false,500)
@@ -1257,6 +1445,11 @@
     // Skip boot, show desktop immediately
     document.getElementById('boot').classList.add('hidden')
     document.getElementById('desktop').classList.add('in')
+    let savedMode='creative'
+    try{savedMode=localStorage.getItem('wos_mode')||'creative'}catch(e){}
+    applyMode(savedMode)
+    const swEl=document.getElementById('modeSwitch')
+    if(swEl)swEl.classList.add('show')
     S.booted=true
     S.bi=LINES.length
     document.addEventListener('keydown',kbd)
