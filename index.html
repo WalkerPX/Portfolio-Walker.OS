@@ -488,14 +488,14 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
-    .mp-card[data-mode="creative"]:hover{border-color:#d4483f;
-      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(212,72,63,.32),0 0 26px rgba(212,72,63,.14)}
+    .mp-card[data-mode="creative"]:hover{border-color:#9e1b24;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(158,27,36,.3),0 0 26px rgba(158,27,36,.12)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
-    .mp-card[data-mode="creative"] .mp-glyph{color:#e8caa8}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#9e1b24}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
-    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(212,72,63,.22);
-      background:linear-gradient(160deg,#220d10,#0e0405)}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(158,27,36,.22);
+      background:linear-gradient(160deg,#f4ecd9,#e4d9c0)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -529,39 +529,52 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
-    /* ===== CREATIVE INSTANCE THEME (crimson + cream, IU) =====
-       Dark like the professional instance but a different world: IU crimson
-       on near-black with cream type, against Purdue graphite + gold.
+    /* ===== CREATIVE INSTANCE THEME (cream + crimson, IU) =====
+       Inverted against the professional instance: aged cream paper with IU
+       crimson as the accent, where professional is dark graphite + gold.
        Icy stays on the boot sequence and the workspace picker. */
     body[data-mode="creative"]{
-      --bg-deep:#100607;
-      --bg-surface:#1a0a0d;
-      --bg-elevated:#240e12;
-      --bg-hover:rgba(212,72,63,.10);
-      --accent:#d4483f;
-      --accent-dim:#9e1b24;
-      --accent-rgb:212,72,63;
-      --accent-glow:rgba(212,72,63,.26);
-      --text:#f6edda;
-      --text-dim:#d9c9b4;
-      --text-muted:#a48e78;
-      --border:rgba(212,72,63,.20);
-      --border-strong:rgba(212,72,63,.32);
+      --bg-deep:#e9e0cb;
+      --bg-surface:#f4ecd9;
+      --bg-elevated:#fbf5e6;
+      --bg-hover:rgba(158,27,36,.07);
+      --accent:#9e1b24;
+      --accent-dim:#7a141b;
+      --accent-rgb:158,27,36;
+      --accent-glow:rgba(158,27,36,.15);
+      --text:#241a12;
+      --text-dim:#4d3c2c;
+      --text-muted:#8a745c;
+      --border:rgba(158,27,36,.18);
+      --border-strong:rgba(158,27,36,.3);
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 22% 26%,rgba(158,27,36,.16) 0%,transparent 56%),
-        radial-gradient(ellipse at 78% 76%,rgba(246,237,218,.045) 0%,transparent 48%),
-        linear-gradient(165deg,#0d0405,#160709 26%,#1c090c 54%,#160709 78%,#0d0405)
+        radial-gradient(ellipse at 20% 24%,rgba(158,27,36,.06) 0%,transparent 56%),
+        radial-gradient(ellipse at 78% 76%,rgba(120,90,48,.07) 0%,transparent 48%),
+        linear-gradient(165deg,#e7ddc6,#f0e8d6 26%,#e4d9c0 54%,#f1e9d8 78%,#e6dcc5)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(246,237,218,.028) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(246,237,218,.028) 1px,transparent 1px)
+        linear-gradient(rgba(158,27,36,.045) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(158,27,36,.045) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(23,9,12,.96)}
-    body[data-mode="creative"] .tb{background:rgba(13,5,7,.94)}
-    body[data-mode="creative"] .w-tb{background:rgba(246,237,218,.02)}
+    body[data-mode="creative"] .w{background:rgba(250,244,231,.97);
+      box-shadow:0 16px 38px rgba(64,46,26,.18),0 2px 5px rgba(64,46,26,.08)}
+    body[data-mode="creative"] .tb{background:rgba(241,233,216,.95)}
+    body[data-mode="creative"] .w-tb{background:rgba(0,0,0,.014)}
+    body[data-mode="creative"] .wc,
+    body[data-mode="creative"] .gi,
+    body[data-mode="creative"] .lc,
+    body[data-mode="creative"] .cf .fl input,
+    body[data-mode="creative"] .cf .fl textarea{background:rgba(96,72,40,.035)}
+    body[data-mode="creative"] .wc:hover,
+    body[data-mode="creative"] .lc:hover,
+    body[data-mode="creative"] .cf .fl input:focus,
+    body[data-mode="creative"] .cf .fl textarea:focus{background:rgba(96,72,40,.06)}
+    body[data-mode="creative"] .ms-btn{background:rgba(250,244,231,.8);border-color:rgba(158,27,36,.2)}
+    body[data-mode="creative"] .ms-btn.on{background:rgba(158,27,36,.1)}
+    body[data-mode="creative"] .crt::after{opacity:.26}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
     body[data-mode="professional"]{
@@ -1276,7 +1289,7 @@
     if(layer){
       layer.style.display='block'
       layer.style.background=(m==='creative')
-        ? 'linear-gradient(165deg,#0d0405,#1c090c 55%,#120608)'
+        ? 'linear-gradient(165deg,#e7ddc6,#f1e9d8 55%,#e9e0cb)'
         : 'linear-gradient(165deg,#06070a,#0e1116 55%,#080a0d)'
       layer.style.left=r.left+'px';layer.style.top=r.top+'px'
       layer.style.width=r.width+'px';layer.style.height=r.height+'px'
