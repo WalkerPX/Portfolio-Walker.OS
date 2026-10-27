@@ -472,10 +472,12 @@
 
     /* first-run workspace picker */
     #modePicker{position:fixed;inset:0;z-index:900;display:none;align-items:center;justify-content:center;
-      background:radial-gradient(circle at 50% 38%,#0b1524 0%,#05080f 68%);}
+      background:
+        radial-gradient(ellipse at 50% 30%,rgba(107,159,255,.10) 0%,transparent 60%),
+        linear-gradient(165deg,#0a1018,#0c1524 40%,#070a10 100%);}
     #modePicker.show{display:flex}
     .mp-inner{text-align:center;padding:20px}
-    .mp-kicker{font-family:var(--font-ui);font-size:10px;letter-spacing:3px;color:var(--accent);opacity:.8;text-transform:uppercase}
+    .mp-kicker{font-family:var(--font-ui);font-size:10px;letter-spacing:3px;color:#8CB4FF;opacity:.85;text-transform:uppercase}
     .mp-title{font-size:34px;font-weight:700;color:var(--text);letter-spacing:-.5px;margin:6px 0 2px}
     .mp-lead{font-family:var(--font-ui);font-size:12px;color:var(--text-muted);margin-bottom:30px}
     .mp-row{display:flex;gap:26px;justify-content:center;flex-wrap:wrap}
@@ -485,6 +487,16 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
+    .mp-card[data-mode="creative"]:hover{border-color:#c98bff;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,139,255,.3),0 0 26px rgba(201,139,255,.14)}
+    .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#c98bff}
+    .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(201,139,255,.18);
+      background:linear-gradient(160deg,#1a1030,#0c0718)}
+    .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
+      background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
       display:flex;align-items:center;justify-content:center;
       background:linear-gradient(160deg,#12233a,#08111c);border:1px solid rgba(var(--accent-rgb),.16)}
@@ -516,6 +528,39 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
+    /* ===== CREATIVE INSTANCE THEME (plum + violet) =====
+       The icy palette stays on the boot sequence and the workspace picker;
+       once a workspace is chosen the desktop wears that workspace's colours. */
+    body[data-mode="creative"]{
+      --bg-deep:#0b0711;
+      --bg-surface:#150d1f;
+      --bg-elevated:#1e1231;
+      --bg-hover:rgba(201,139,255,.10);
+      --accent:#c98bff;
+      --accent-dim:#a855f7;
+      --accent-rgb:201,139,255;
+      --accent-glow:rgba(201,139,255,.30);
+      --text:#f8f3ff;
+      --text-dim:#d6c8ea;
+      --text-muted:#9a87b4;
+      --border:rgba(201,139,255,.18);
+      --border-strong:rgba(201,139,255,.32);
+    }
+    body[data-mode="creative"] .wp{
+      background:
+        radial-gradient(ellipse at 24% 28%,rgba(201,139,255,.09) 0%,transparent 52%),
+        radial-gradient(ellipse at 72% 74%,rgba(255,92,168,.06) 0%,transparent 44%),
+        linear-gradient(165deg,#0a0610,#120b1c 25%,#170f24 52%,#120b1c 76%,#0a0610)
+    }
+    body[data-mode="creative"] .grid{
+      background-image:
+        linear-gradient(rgba(201,139,255,.045) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(201,139,255,.045) 1px,transparent 1px)
+    }
+    body[data-mode="creative"] .w{background:rgba(18,11,27,.96)}
+    body[data-mode="creative"] .tb{background:rgba(13,8,20,.94)}
+    body[data-mode="creative"] .w-tb{background:rgba(255,255,255,.016)}
+
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
     body[data-mode="professional"]{
       --bg-deep:#070809;
