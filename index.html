@@ -558,9 +558,9 @@
     body,.wp,.grid,.tb{transition:background-color .5s ease,background .5s ease,border-color .5s ease,color .5s ease}
 
     /* scrim used while one instance hands over to the other */
-    #modeScrim{position:fixed;inset:0;z-index:850;background:#04050a;opacity:0;pointer-events:none;
-      transition:opacity .26s ease}
-    #modeScrim.on{opacity:.96}
+    #modeScrim{position:fixed;inset:0;z-index:850;background:#000;opacity:0;pointer-events:none;
+      transition:opacity .34s ease}
+    #modeScrim.on{opacity:1}
 
   </style>
 </head>
@@ -1187,15 +1187,20 @@
     snapshotSession(MODE)
     // 1. this desktop's windows fold down into the tray
     minimizeAll(()=>{
-      // 2. cover the screen while the colour scheme changes, then reveal
+      // 2. go completely dark
       if(scrim)scrim.classList.add('on')
       setTimeout(()=>{
+        // 3. swap the theme while the screen is black
         applyMode(m)
-        restoreSession(m,()=>{
+        setTimeout(()=>{
+          // 4. open up on the new themed desktop, still empty
           if(scrim)scrim.classList.remove('on')
-          SWAPPING=false
-        })
-      },270)
+          setTimeout(()=>{
+            // 5. only now do the apps come back, so the restore is visible
+            restoreSession(m,()=>{SWAPPING=false})
+          },560)
+        },340)
+      },480)
     })
   }
 
