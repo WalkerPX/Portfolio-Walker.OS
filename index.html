@@ -487,14 +487,14 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
-    .mp-card[data-mode="creative"]:hover{border-color:#0f7a6f;
-      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(15,122,111,.3),0 0 26px rgba(15,122,111,.14)}
+    .mp-card[data-mode="creative"]:hover{border-color:#18766c;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(24,118,108,.3),0 0 26px rgba(24,118,108,.14)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
-    .mp-card[data-mode="creative"] .mp-glyph{color:#0f7a6f}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#18766c}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
-    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(15,122,111,.2);
-      background:linear-gradient(160deg,#f6f3ec,#e9e4d9)}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(24,118,108,.2);
+      background:linear-gradient(160deg,#f4eee1,#e4dbc9)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -528,51 +528,51 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
-    /* ===== CREATIVE INSTANCE THEME (paper + teal) =====
-       Deliberately light where the professional instance is dark: warm paper
-       desktop, deep teal accents. Icy stays on the boot sequence + picker. */
+    /* ===== CREATIVE INSTANCE THEME (cream + teal) =====
+       Deliberately light where the professional instance is dark: warm cream
+       desktop, muted teal ink accents. Icy stays on boot + picker. */
     body[data-mode="creative"]{
-      --bg-deep:#f1eee7;
-      --bg-surface:#fbf9f4;
-      --bg-elevated:#ffffff;
-      --bg-hover:rgba(15,122,111,.08);
-      --accent:#0f7a6f;
-      --accent-dim:#0a5f57;
-      --accent-rgb:15,122,111;
-      --accent-glow:rgba(15,122,111,.18);
-      --text:#151a19;
-      --text-dim:#3f4a48;
-      --text-muted:#77837e;
-      --border:rgba(15,122,111,.18);
-      --border-strong:rgba(15,122,111,.3);
+      --bg-deep:#e9e1d2;
+      --bg-surface:#f6f0e4;
+      --bg-elevated:#fcf7ee;
+      --bg-hover:rgba(21,115,106,.07);
+      --accent:#18766c;
+      --accent-dim:#0f5c55;
+      --accent-rgb:24,118,108;
+      --accent-glow:rgba(24,118,108,.16);
+      --text:#231f18;
+      --text-dim:#4b453a;
+      --text-muted:#867e6e;
+      --border:rgba(24,118,108,.16);
+      --border-strong:rgba(24,118,108,.28);
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 22% 26%,rgba(15,122,111,.055) 0%,transparent 54%),
-        radial-gradient(ellipse at 76% 74%,rgba(232,150,84,.07) 0%,transparent 46%),
-        linear-gradient(165deg,#f4f1ea,#f7f4ed 25%,#efece3 52%,#f6f3ec 76%,#f2efe8)
+        radial-gradient(ellipse at 20% 24%,rgba(24,118,108,.04) 0%,transparent 56%),
+        radial-gradient(ellipse at 78% 76%,rgba(178,138,84,.07) 0%,transparent 48%),
+        linear-gradient(165deg,#e8e0d1,#f0e9dc 26%,#e6ddcd 54%,#f1eade 78%,#e7dfd0)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(15,122,111,.055) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(15,122,111,.055) 1px,transparent 1px)
+        linear-gradient(rgba(24,118,108,.035) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(24,118,108,.035) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(255,253,250,.97);
-      box-shadow:0 18px 44px rgba(28,38,36,.18),0 2px 6px rgba(28,38,36,.08)}
-    body[data-mode="creative"] .tb{background:rgba(249,246,240,.95)}
+    body[data-mode="creative"] .w{background:rgba(251,246,236,.97);
+      box-shadow:0 16px 38px rgba(52,44,30,.16),0 2px 5px rgba(52,44,30,.07)}
+    body[data-mode="creative"] .tb{background:rgba(243,236,224,.95)}
     body[data-mode="creative"] .w-tb{background:rgba(0,0,0,.012)}
     body[data-mode="creative"] .wc,
     body[data-mode="creative"] .gi,
     body[data-mode="creative"] .lc,
     body[data-mode="creative"] .cf .fl input,
-    body[data-mode="creative"] .cf .fl textarea{background:rgba(0,0,0,.022)}
+    body[data-mode="creative"] .cf .fl textarea{background:rgba(80,66,44,.035)}
     body[data-mode="creative"] .wc:hover,
     body[data-mode="creative"] .lc:hover,
     body[data-mode="creative"] .cf .fl input:focus,
-    body[data-mode="creative"] .cf .fl textarea:focus{background:rgba(0,0,0,.045)}
-    body[data-mode="creative"] .ms-btn{background:rgba(255,255,255,.78);border-color:rgba(15,122,111,.2)}
-    body[data-mode="creative"] .ms-btn.on{background:rgba(15,122,111,.12)}
-    body[data-mode="creative"] .crt::after{opacity:.32}
+    body[data-mode="creative"] .cf .fl textarea:focus{background:rgba(80,66,44,.06)}
+    body[data-mode="creative"] .ms-btn{background:rgba(251,246,236,.8);border-color:rgba(24,118,108,.18)}
+    body[data-mode="creative"] .ms-btn.on{background:rgba(24,118,108,.1)}
+    body[data-mode="creative"] .crt::after{opacity:.26}
     body[data-mode="creative"] .w-bd .st{letter-spacing:.5px}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
