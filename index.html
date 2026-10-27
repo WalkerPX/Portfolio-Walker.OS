@@ -476,6 +476,7 @@
         radial-gradient(ellipse at 50% 30%,rgba(107,159,255,.10) 0%,transparent 60%),
         linear-gradient(165deg,#0a1018,#0c1524 40%,#070a10 100%);}
     #modePicker.show{display:flex}
+    #modePicker{transition:opacity .3s ease}
     .mp-inner{text-align:center;padding:20px}
     .mp-kicker{font-family:var(--font-ui);font-size:10px;letter-spacing:3px;color:#8CB4FF;opacity:.85;text-transform:uppercase}
     .mp-title{font-size:34px;font-weight:700;color:var(--text);letter-spacing:-.5px;margin:6px 0 2px}
@@ -487,14 +488,14 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
-    .mp-card[data-mode="creative"]:hover{border-color:#18766c;
-      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(24,118,108,.3),0 0 26px rgba(24,118,108,.14)}
+    .mp-card[data-mode="creative"]:hover{border-color:#2fbfae;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(47,191,174,.3),0 0 26px rgba(47,191,174,.14)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
-    .mp-card[data-mode="creative"] .mp-glyph{color:#18766c}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#2fbfae}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
-    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(24,118,108,.2);
-      background:linear-gradient(160deg,#f4eee1,#e4dbc9)}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(47,191,174,.2);
+      background:linear-gradient(160deg,#0c1d1b,#061110)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -528,52 +529,39 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
-    /* ===== CREATIVE INSTANCE THEME (cream + teal) =====
-       Deliberately light where the professional instance is dark: warm cream
-       desktop, muted teal ink accents. Icy stays on boot + picker. */
+    /* ===== CREATIVE INSTANCE THEME (deep teal) =====
+       Dark like the professional instance but a different world: green-teal
+       ink with an aqua accent, against the professional graphite + gold.
+       Icy stays on the boot sequence and the workspace picker. */
     body[data-mode="creative"]{
-      --bg-deep:#e9e1d2;
-      --bg-surface:#f6f0e4;
-      --bg-elevated:#fcf7ee;
-      --bg-hover:rgba(21,115,106,.07);
-      --accent:#18766c;
-      --accent-dim:#0f5c55;
-      --accent-rgb:24,118,108;
-      --accent-glow:rgba(24,118,108,.16);
-      --text:#231f18;
-      --text-dim:#4b453a;
-      --text-muted:#867e6e;
-      --border:rgba(24,118,108,.16);
-      --border-strong:rgba(24,118,108,.28);
+      --bg-deep:#060f0e;
+      --bg-surface:#0b1817;
+      --bg-elevated:#102220;
+      --bg-hover:rgba(47,191,174,.10);
+      --accent:#2fbfae;
+      --accent-dim:#1f8f84;
+      --accent-rgb:47,191,174;
+      --accent-glow:rgba(47,191,174,.26);
+      --text:#eafaf7;
+      --text-dim:#b4d4cf;
+      --text-muted:#77948f;
+      --border:rgba(47,191,174,.18);
+      --border-strong:rgba(47,191,174,.3);
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 20% 24%,rgba(24,118,108,.04) 0%,transparent 56%),
-        radial-gradient(ellipse at 78% 76%,rgba(178,138,84,.07) 0%,transparent 48%),
-        linear-gradient(165deg,#e8e0d1,#f0e9dc 26%,#e6ddcd 54%,#f1eade 78%,#e7dfd0)
+        radial-gradient(ellipse at 22% 26%,rgba(47,191,174,.075) 0%,transparent 54%),
+        radial-gradient(ellipse at 76% 74%,rgba(24,120,110,.06) 0%,transparent 46%),
+        linear-gradient(165deg,#050d0c,#081513 26%,#0a1a18 54%,#081513 78%,#050d0c)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(24,118,108,.035) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(24,118,108,.035) 1px,transparent 1px)
+        linear-gradient(rgba(47,191,174,.04) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(47,191,174,.04) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(251,246,236,.97);
-      box-shadow:0 16px 38px rgba(52,44,30,.16),0 2px 5px rgba(52,44,30,.07)}
-    body[data-mode="creative"] .tb{background:rgba(243,236,224,.95)}
-    body[data-mode="creative"] .w-tb{background:rgba(0,0,0,.012)}
-    body[data-mode="creative"] .wc,
-    body[data-mode="creative"] .gi,
-    body[data-mode="creative"] .lc,
-    body[data-mode="creative"] .cf .fl input,
-    body[data-mode="creative"] .cf .fl textarea{background:rgba(80,66,44,.035)}
-    body[data-mode="creative"] .wc:hover,
-    body[data-mode="creative"] .lc:hover,
-    body[data-mode="creative"] .cf .fl input:focus,
-    body[data-mode="creative"] .cf .fl textarea:focus{background:rgba(80,66,44,.06)}
-    body[data-mode="creative"] .ms-btn{background:rgba(251,246,236,.8);border-color:rgba(24,118,108,.18)}
-    body[data-mode="creative"] .ms-btn.on{background:rgba(24,118,108,.1)}
-    body[data-mode="creative"] .crt::after{opacity:.26}
-    body[data-mode="creative"] .w-bd .st{letter-spacing:.5px}
+    body[data-mode="creative"] .w{background:rgba(9,20,19,.96)}
+    body[data-mode="creative"] .tb{background:rgba(5,12,11,.94)}
+    body[data-mode="creative"] .w-tb{background:rgba(255,255,255,.014)}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
     body[data-mode="professional"]{
@@ -620,6 +608,12 @@
     #modeScrim{position:fixed;inset:0;z-index:850;background:#000;opacity:0;pointer-events:none;
       transition:opacity .34s ease}
     #modeScrim.on{opacity:1}
+
+    /* zoom used when a workspace is launched from the picker */
+    #zoomLayer{position:fixed;z-index:950;display:none;pointer-events:none;background:#050d0c;
+      box-shadow:0 0 90px rgba(0,0,0,.65) inset;
+      transition:left .58s var(--ease),top .58s var(--ease),width .58s var(--ease),
+                 height .58s var(--ease),border-radius .58s var(--ease),opacity .4s ease}
 
   </style>
 </head>
@@ -907,6 +901,7 @@
 </div>
 
 <div id="modeScrim"></div>
+<div id="zoomLayer"></div>
 
 <!-- ===== WORKSPACE PICKER (first load) ===== -->
 <div id="modePicker">
@@ -915,12 +910,12 @@
     <div class="mp-title">Choose your workspace</div>
     <div class="mp-lead">Two systems, one machine. You can switch anytime from the top left.</div>
     <div class="mp-row">
-      <div class="mp-card" data-mode="creative" onclick="chooseMode('creative')">
+      <div class="mp-card" data-mode="creative" onclick="chooseMode('creative',event)">
         <div class="mp-tile"><img src="assets/creative-logo.png" alt="Creative" onerror="imgFallback(this)" /><span class="mp-glyph">C</span></div>
         <div class="mp-name">Creative</div>
         <div class="mp-desc">Photography &middot; Design &middot; Creative Direction</div>
       </div>
-      <div class="mp-card" data-mode="professional" onclick="chooseMode('professional')">
+      <div class="mp-card" data-mode="professional" onclick="chooseMode('professional',event)">
         <div class="mp-tile"><img src="assets/professional-logo.png" alt="Professional" onerror="imgFallback(this)" /><span class="mp-glyph">P</span></div>
         <div class="mp-name">Professional</div>
         <div class="mp-desc">R&eacute;sum&eacute; &middot; Writing &middot; Law</div>
@@ -1263,13 +1258,45 @@
     })
   }
 
-  function chooseMode(m){
-    applyMode(m)
-    const p=document.getElementById('modePicker')
-    if(p)p.classList.remove('show')
+  function chooseMode(m,ev){
+    const picker=document.getElementById('modePicker')
+    const layer=document.getElementById('zoomLayer')
     const sw=document.getElementById('modeSwitch')
     if(sw)sw.classList.add('show')
-    // first launch of this instance opens its own About
+    // zoom out of the tile the visitor clicked, like opening an app
+    let r={top:window.innerHeight/2-50,left:window.innerWidth/2-50,width:100,height:100}
+    try{
+      const card=ev&&ev.currentTarget?ev.currentTarget.closest('.mp-card'):null
+      const tile=card&&card.querySelector('.mp-tile')
+      if(tile)r=tile.getBoundingClientRect()
+    }catch(e){}
+    // paint the instance's theme first: the picker is opaque, so the colour
+    // change happens out of sight and the zoom grows over the real desktop
+    applyMode(m)
+    if(layer){
+      layer.style.display='block'
+      layer.style.background=(m==='creative')
+        ? 'linear-gradient(165deg,#050d0c,#0a1a18 55%,#061210)'
+        : 'linear-gradient(165deg,#06070a,#0e1116 55%,#080a0d)'
+      layer.style.left=r.left+'px';layer.style.top=r.top+'px'
+      layer.style.width=r.width+'px';layer.style.height=r.height+'px'
+      layer.style.borderRadius='22px';layer.style.opacity='1'
+      void layer.offsetHeight
+      if(picker)picker.style.opacity='0'
+      layer.style.left='0px';layer.style.top='0px'
+      layer.style.width='100vw';layer.style.height='100vh'
+      layer.style.borderRadius='0px'
+      setTimeout(()=>{
+        if(picker){picker.classList.remove('show');picker.style.opacity=''}
+        if(layer)layer.style.opacity='0'
+        setTimeout(()=>{
+          if(layer)layer.style.display='none'
+          restoreSession(m,()=>{})
+        },400)
+      },590)
+      return
+    }
+    if(picker)picker.classList.remove('show')
     setTimeout(()=>{restoreSession(m,()=>{})},300)
   }
 
