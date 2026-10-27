@@ -488,14 +488,14 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
-    .mp-card[data-mode="creative"]:hover{border-color:#2fbfae;
-      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(47,191,174,.3),0 0 26px rgba(47,191,174,.14)}
+    .mp-card[data-mode="creative"]:hover{border-color:#d4483f;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(212,72,63,.32),0 0 26px rgba(212,72,63,.14)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
-    .mp-card[data-mode="creative"] .mp-glyph{color:#2fbfae}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#e8caa8}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
-    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(47,191,174,.2);
-      background:linear-gradient(160deg,#0c1d1b,#061110)}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(212,72,63,.22);
+      background:linear-gradient(160deg,#220d10,#0e0405)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -529,39 +529,39 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
-    /* ===== CREATIVE INSTANCE THEME (deep teal) =====
-       Dark like the professional instance but a different world: green-teal
-       ink with an aqua accent, against the professional graphite + gold.
+    /* ===== CREATIVE INSTANCE THEME (crimson + cream, IU) =====
+       Dark like the professional instance but a different world: IU crimson
+       on near-black with cream type, against Purdue graphite + gold.
        Icy stays on the boot sequence and the workspace picker. */
     body[data-mode="creative"]{
-      --bg-deep:#060f0e;
-      --bg-surface:#0b1817;
-      --bg-elevated:#102220;
-      --bg-hover:rgba(47,191,174,.10);
-      --accent:#2fbfae;
-      --accent-dim:#1f8f84;
-      --accent-rgb:47,191,174;
-      --accent-glow:rgba(47,191,174,.26);
-      --text:#eafaf7;
-      --text-dim:#b4d4cf;
-      --text-muted:#77948f;
-      --border:rgba(47,191,174,.18);
-      --border-strong:rgba(47,191,174,.3);
+      --bg-deep:#100607;
+      --bg-surface:#1a0a0d;
+      --bg-elevated:#240e12;
+      --bg-hover:rgba(212,72,63,.10);
+      --accent:#d4483f;
+      --accent-dim:#9e1b24;
+      --accent-rgb:212,72,63;
+      --accent-glow:rgba(212,72,63,.26);
+      --text:#f6edda;
+      --text-dim:#d9c9b4;
+      --text-muted:#a48e78;
+      --border:rgba(212,72,63,.20);
+      --border-strong:rgba(212,72,63,.32);
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 22% 26%,rgba(47,191,174,.075) 0%,transparent 54%),
-        radial-gradient(ellipse at 76% 74%,rgba(24,120,110,.06) 0%,transparent 46%),
-        linear-gradient(165deg,#050d0c,#081513 26%,#0a1a18 54%,#081513 78%,#050d0c)
+        radial-gradient(ellipse at 22% 26%,rgba(158,27,36,.16) 0%,transparent 56%),
+        radial-gradient(ellipse at 78% 76%,rgba(246,237,218,.045) 0%,transparent 48%),
+        linear-gradient(165deg,#0d0405,#160709 26%,#1c090c 54%,#160709 78%,#0d0405)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(47,191,174,.04) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(47,191,174,.04) 1px,transparent 1px)
+        linear-gradient(rgba(246,237,218,.028) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(246,237,218,.028) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(9,20,19,.96)}
-    body[data-mode="creative"] .tb{background:rgba(5,12,11,.94)}
-    body[data-mode="creative"] .w-tb{background:rgba(255,255,255,.014)}
+    body[data-mode="creative"] .w{background:rgba(23,9,12,.96)}
+    body[data-mode="creative"] .tb{background:rgba(13,5,7,.94)}
+    body[data-mode="creative"] .w-tb{background:rgba(246,237,218,.02)}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
     body[data-mode="professional"]{
@@ -1276,7 +1276,7 @@
     if(layer){
       layer.style.display='block'
       layer.style.background=(m==='creative')
-        ? 'linear-gradient(165deg,#050d0c,#0a1a18 55%,#061210)'
+        ? 'linear-gradient(165deg,#0d0405,#1c090c 55%,#120608)'
         : 'linear-gradient(165deg,#06070a,#0e1116 55%,#080a0d)'
       layer.style.left=r.left+'px';layer.style.top=r.top+'px'
       layer.style.width=r.width+'px';layer.style.height=r.height+'px'
