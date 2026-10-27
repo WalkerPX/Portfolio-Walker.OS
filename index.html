@@ -496,7 +496,7 @@
     .mp-card[data-mode="creative"] .mp-glyph{color:#f6edda}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
     .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(246,237,218,.2);
-      background:linear-gradient(160deg,#1d1915,#0b0a08)}
+      background:linear-gradient(160deg,#211a16,#0c0a08)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -531,18 +531,18 @@
       .ms-btn{width:36px;height:36px}
     }
     /* ===== CREATIVE INSTANCE THEME (cream + crimson, IU) =====
-       Ground is a warm cream-tinted charcoal; IU crimson only appears on
-       accented text, borders and rules. Professional stays graphite + gold. */
+       Warm cream-tinted charcoal ground with the faintest red wash; crimson
+       only on accented text, rules and highlights. Professional: ink + gold. */
     body[data-mode="creative"]{
-      --bg-deep:#0d0b09;
-      --bg-surface:#171310;
-      --bg-elevated:#201a14;
+      --bg-deep:#0e0a09;
+      --bg-surface:#181210;
+      --bg-elevated:#221a16;
       --bg-hover:rgba(246,237,218,.07);
-      --accent:#cf3a33;
-      --accent-dim:#9e1b24;
-      --accent-rgb:207,58,51;
+      --accent:#c8463c;
+      --accent-dim:#99261f;
+      --accent-rgb:200,70,60;
       --tint-rgb:246,237,218;
-      --accent-glow:rgba(207,58,51,.26);
+      --accent-glow:rgba(200,70,60,.24);
       --text:#f6edda;
       --text-dim:#d9c9b4;
       --text-muted:#a48e78;
@@ -551,17 +551,18 @@
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 22% 26%,rgba(246,237,218,.055) 0%,transparent 56%),
-        radial-gradient(ellipse at 78% 76%,rgba(232,196,140,.04) 0%,transparent 48%),
-        linear-gradient(165deg,#0a0908,#141110 26%,#191512 54%,#141110 78%,#0a0908)
+        radial-gradient(ellipse at 22% 26%,rgba(246,237,218,.05) 0%,transparent 56%),
+        radial-gradient(ellipse at 78% 74%,rgba(200,70,60,.055) 0%,transparent 50%),
+        radial-gradient(ellipse at 50% 100%,rgba(232,196,140,.035) 0%,transparent 55%),
+        linear-gradient(165deg,#0b0908,#15100e 26%,#191310 54%,#15100e 78%,#0b0908)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(246,237,218,.03) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(246,237,218,.03) 1px,transparent 1px)
+        linear-gradient(rgba(246,237,218,.028) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(246,237,218,.028) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(21,17,14,.96)}
-    body[data-mode="creative"] .tb{background:rgba(12,10,8,.94)}
+    body[data-mode="creative"] .w{background:rgba(25,18,16,.96)}
+    body[data-mode="creative"] .tb{background:rgba(14,10,9,.94)}
     body[data-mode="creative"] .w-tb{background:rgba(246,237,218,.02)}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
@@ -1278,7 +1279,7 @@
     if(layer){
       layer.style.display='block'
       layer.style.background=(m==='creative')
-        ? 'linear-gradient(165deg,#0a0908,#191512 55%,#0f0d0b)'
+        ? 'linear-gradient(165deg,#0b0908,#1a1411 55%,#100c0a)'
         : 'linear-gradient(165deg,#06070a,#0e1116 55%,#080a0d)'
       layer.style.left=r.left+'px';layer.style.top=r.top+'px'
       layer.style.width=r.width+'px';layer.style.height=r.height+'px'
