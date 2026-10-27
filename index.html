@@ -487,14 +487,14 @@
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--accent-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
     .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
-    .mp-card[data-mode="creative"]:hover{border-color:#c98bff;
-      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,139,255,.3),0 0 26px rgba(201,139,255,.14)}
+    .mp-card[data-mode="creative"]:hover{border-color:#ff6b6b;
+      box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(255,107,107,.3),0 0 26px rgba(255,107,107,.14)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(201,162,39,.3),0 0 26px rgba(201,162,39,.12)}
-    .mp-card[data-mode="creative"] .mp-glyph{color:#c98bff}
+    .mp-card[data-mode="creative"] .mp-glyph{color:#ff6b6b}
     .mp-card[data-mode="professional"] .mp-glyph{color:#d9b96a}
-    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(201,139,255,.18);
-      background:linear-gradient(160deg,#1a1030,#0c0718)}
+    .mp-card[data-mode="creative"] .mp-tile{border-color:rgba(255,107,107,.18);
+      background:linear-gradient(160deg,#2a1216,#0d0507)}
     .mp-card[data-mode="professional"] .mp-tile{border-color:rgba(201,162,39,.18);
       background:linear-gradient(160deg,#191a16,#0a0b09)}
     .mp-tile{width:104px;height:104px;margin:0 auto 14px;border-radius:24px;overflow:hidden;
@@ -528,37 +528,37 @@
       #modeSwitch{top:auto;bottom:56px;left:8px;gap:5px}
       .ms-btn{width:36px;height:36px}
     }
-    /* ===== CREATIVE INSTANCE THEME (plum + violet) =====
+    /* ===== CREATIVE INSTANCE THEME (embers + crimson) =====
        The icy palette stays on the boot sequence and the workspace picker;
        once a workspace is chosen the desktop wears that workspace's colours. */
     body[data-mode="creative"]{
-      --bg-deep:#0b0711;
-      --bg-surface:#150d1f;
-      --bg-elevated:#1e1231;
-      --bg-hover:rgba(201,139,255,.10);
-      --accent:#c98bff;
-      --accent-dim:#a855f7;
-      --accent-rgb:201,139,255;
-      --accent-glow:rgba(201,139,255,.30);
-      --text:#f8f3ff;
-      --text-dim:#d6c8ea;
-      --text-muted:#9a87b4;
-      --border:rgba(201,139,255,.18);
-      --border-strong:rgba(201,139,255,.32);
+      --bg-deep:#0c0607;
+      --bg-surface:#170c0f;
+      --bg-elevated:#231116;
+      --bg-hover:rgba(255,107,107,.10);
+      --accent:#ff6b6b;
+      --accent-dim:#dd2f3d;
+      --accent-rgb:255,107,107;
+      --accent-glow:rgba(255,107,107,.28);
+      --text:#fff3f2;
+      --text-dim:#e8cbc8;
+      --text-muted:#ab8a88;
+      --border:rgba(255,107,107,.18);
+      --border-strong:rgba(255,107,107,.32);
     }
     body[data-mode="creative"] .wp{
       background:
-        radial-gradient(ellipse at 24% 28%,rgba(201,139,255,.09) 0%,transparent 52%),
-        radial-gradient(ellipse at 72% 74%,rgba(255,92,168,.06) 0%,transparent 44%),
-        linear-gradient(165deg,#0a0610,#120b1c 25%,#170f24 52%,#120b1c 76%,#0a0610)
+        radial-gradient(ellipse at 24% 28%,rgba(255,90,90,.075) 0%,transparent 52%),
+        radial-gradient(ellipse at 74% 72%,rgba(255,150,70,.05) 0%,transparent 46%),
+        linear-gradient(165deg,#0b0506,#150a0d 25%,#1a0d11 52%,#150a0d 76%,#0b0506)
     }
     body[data-mode="creative"] .grid{
       background-image:
-        linear-gradient(rgba(201,139,255,.045) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(201,139,255,.045) 1px,transparent 1px)
+        linear-gradient(rgba(255,107,107,.04) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,107,107,.04) 1px,transparent 1px)
     }
-    body[data-mode="creative"] .w{background:rgba(18,11,27,.96)}
-    body[data-mode="creative"] .tb{background:rgba(13,8,20,.94)}
+    body[data-mode="creative"] .w{background:rgba(20,10,13,.96)}
+    body[data-mode="creative"] .tb{background:rgba(14,7,9,.94)}
     body[data-mode="creative"] .w-tb{background:rgba(255,255,255,.016)}
 
     /* ===== PROFESSIONAL INSTANCE THEME (ink + gold) ===== */
