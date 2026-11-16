@@ -322,6 +322,22 @@
       color:var(--accent);margin-right:3px;margin-bottom:3px
     }
 
+    /* Professional Projects — bullet list + blue glow links */
+    .ppl{list-style:none;display:flex;flex-direction:column;gap:4px;margin-top:2px}
+    .ppl li{position:relative;padding-left:18px;font-size:13px;line-height:1.7}
+    .ppl li::before{content:'';position:absolute;left:3px;top:.68em;width:5px;height:5px;border-radius:50%;
+      background:rgba(var(--tint-rgb),.4);transition:background .18s ease,box-shadow .25s ease}
+    .ppl li:hover::before{background:#8CB4FF;box-shadow:0 0 8px rgba(107,159,255,.7)}
+    .pp-link{
+      display:inline-block;color:var(--text-dim);text-decoration:none;
+      padding:1px 3px;border-radius:3px;
+      transition:color .18s ease,text-shadow .28s ease
+    }
+    .pp-link:hover,.pp-link:focus-visible{
+      color:#8CB4FF;outline:none;
+      text-shadow:0 0 6px rgba(107,159,255,.8),0 0 16px rgba(107,159,255,.45),0 0 32px rgba(107,159,255,.22)
+    }
+
     /* Work cards */
     .wc{
       background:rgba(255,255,255,.015);
@@ -781,6 +797,28 @@
     <div class="w-rs" onmousedown="resizeStart(event,'w-work')"></div>
   </div>
 
+  <!-- PROFESSIONAL PROJECTS -->
+  <div class="w" id="w-projects" data-modes="professional" style="width:400px;top:110px;left:calc(50% - 200px);max-height:62vh">
+    <div class="w-tb" onmousedown="dragStart(event,'w-projects')">
+      <div class="d">
+        <div class="dt c" onclick="closeWin('projects')"></div>
+        <div class="dt m" onclick="minWin('projects')"></div>
+        <div class="dt x" onclick="maxWin('projects')"></div>
+      </div>
+      <div class="tt"><span class="ico"></span> Professional Projects</div>
+    </div>
+    <div class="w-bd">
+      <h2>Professional Projects</h2>
+      <div class="st">Ongoing projects &amp; reference material</div>
+
+      <ul class="ppl">
+        <li><a class="pp-link" href="lawlibrary/">Walker&rsquo;s Law Library</a></li>
+      </ul>
+
+    </div>
+    <div class="w-rs" onmousedown="resizeStart(event,'w-projects')"></div>
+  </div>
+
   <!-- GALLERY -->
   <div class="w" id="w-gallery" data-modes="creative" style="width:600px;top:85px;left:90px;max-height:73vh">
     <div class="w-tb" onmousedown="dragStart(event,'w-gallery')">
@@ -890,6 +928,7 @@
     <div class="tb-apps" id="tbApps">
       <div class="tb-app" data-app="about" data-modes="both" onclick="toggleWin('about')"><img src="assets/AboutIcon.png" alt="About" /></div>
       <div class="tb-app" data-app="work" data-modes="professional" onclick="toggleWin('work')"><img src="assets/WorkIcon.png" alt="Work" /></div>
+      <div class="tb-app" data-app="projects" data-modes="professional" onclick="toggleWin('projects')"><img src="assets/ProfessionalProjectsIcon.png" alt="Professional Projects" /></div>
       <div class="tb-app" data-app="gallery" data-modes="creative" onclick="toggleWin('gallery')"><img src="assets/GalleryIcon.png" alt="Gallery" /></div>
       <div class="tb-app" data-app="contact" data-modes="both" onclick="toggleWin('contact')"><img src="assets/ContactIcon.png" alt="Contact" /></div>
       <div class="tb-app" data-app="links" data-modes="both" onclick="toggleWin('links')"><img src="assets/LinksIcon.png" alt="Links" /></div>
@@ -1012,7 +1051,7 @@
           S.booted=true
           document.addEventListener('keydown',kbd)
           // Two workspaces: let the visitor pick instead of auto-opening About
-          showModePicker()
+          if(!launchFromURL())showModePicker()
         },300)
       },600)
     }
@@ -1023,7 +1062,7 @@
   document.addEventListener('keydown',e=>{if(S.bi===0&&!document.getElementById('boot').classList.contains('hidden'))boot()})
 
   // ===== TASKBAR TOOLTIP =====
-  const TIP_NAMES={about:'About',work:'Professional Work',gallery:'Creative Work',contact:'Contact',links:'Links'}
+  const TIP_NAMES={about:'About',work:'Professional Work',projects:'Professional Projects',gallery:'Creative Work',contact:'Contact',links:'Links'}
   document.querySelectorAll('.tb-app').forEach(el=>{
     el.addEventListener('mouseenter',()=>{
       const r=el.getBoundingClientRect(),tip=document.getElementById('tbTtip')
@@ -1322,10 +1361,29 @@
     }catch(e){}
   }
 
+  // ===== DEEP LINK — e.g. /?mode=professional&open=work (return from Law Library) =====
+  // Skips the workspace picker and lands on the requested workspace with the
+  // requested windows already open, once the boot sequence has finished.
+  function launchFromURL(){
+    let q
+    try{q=new URLSearchParams(location.search)}catch(e){return false}
+    const m=q.get('mode')
+    if(!MODE_LABELS[m])return false
+    const open=(q.get('open')||'').split(',').filter(n=>n&&document.getElementById('w-'+n))
+    const sw=document.getElementById('modeSwitch')
+    if(sw)sw.classList.add('show')
+    applyMode(m)
+    SESSION[m]={wins:open.length?open:['about'],mx:[]}
+    document.getElementById('modePicker').classList.remove('show')
+    setTimeout(()=>restoreSession(m,()=>{}),220)
+    return true
+  }
+
   // ===== WINDOW MANAGEMENT =====
-  const WINS={about:'About',work:'Work',gallery:'Gallery',links:'Links',contact:'Contact',preview:'Preview'}
+  const WINS={about:'About',work:'Work',projects:'Projects',gallery:'Gallery',links:'Links',contact:'Contact',preview:'Preview'}
   const WINPOS={about:'width:500px;top:50px;left:calc(50% - 250px);max-height:76vh',
     work:'width:440px;top:75px;right:70px;max-height:68vh',
+    projects:'width:400px;top:110px;left:calc(50% - 200px);max-height:62vh',
     gallery:'width:600px;top:85px;left:90px;max-height:73vh',
     links:'width:400px;top:120px;right:90px',
     contact:'width:380px;top:140px;left:130px',
@@ -1342,6 +1400,7 @@
     const targets={
       about:{w:500,h:Math.min(vh*0.76,600),t:50,l:vw/2-250},
       work:{w:440,h:Math.min(vh*0.68,550),t:75,l:vw-440-70},
+      projects:{w:400,h:270,t:110,l:vw/2-200},
       gallery:{w:600,h:Math.min(vh*0.73,580),t:85,l:90},
       links:{w:400,h:380,t:120,l:vw-400-90},
       contact:{w:380,h:360,t:140,l:130}
@@ -1480,7 +1539,7 @@
   function updateMxTabs(){
     const c=document.getElementById('mxTabs')
     const mxed=Object.keys(S.mx).filter(n=>S.mx[n])
-    const icons={about:'<img src="assets/AboutIcon.png">',work:'<img src="assets/WorkIcon.png">',gallery:'<img src="assets/GalleryIcon.png">',links:'<img src="assets/LinksIcon.png">',contact:'<img src="assets/ContactIcon.png">',preview:'📄'}
+    const icons={about:'<img src="assets/AboutIcon.png">',work:'<img src="assets/WorkIcon.png">',projects:'<img src="assets/ProfessionalProjectsIcon.png">',gallery:'<img src="assets/GalleryIcon.png">',links:'<img src="assets/LinksIcon.png">',contact:'<img src="assets/ContactIcon.png">',preview:'📄'}
     if(mxed.length===0){c.classList.remove('show');c.innerHTML='';return}
     c.classList.add('show')
     c.innerHTML=mxed.map(n=>

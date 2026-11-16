@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Walker&rsquo;s Law Library</title>
+  <meta name="description" content="A collection of case briefs and other supporting documents used throughout law school." />
+  <meta property="og:title" content="Walker's Law Library" />
+  <meta property="og:description" content="A collection of case briefs and other supporting documents used throughout law school." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="../assets/WLogoPFP.png" />
+  <link rel="apple-touch-icon" href="../assets/WLogoPFP.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ===== TOKENS — professional instance (ink + gold) ===== */
+    :root{
+      --bg-deep:#070809;
+      --bg-surface:#0e1013;
+      --bg-elevated:#15181d;
+      --accent:#d9b96a;
+      --accent-dim:#c9a227;
+      --accent-rgb:201,162,39;
+      --tint-rgb:201,162,39;
+      --text:#f4f1e9;
+      --text-dim:#cdc7b8;
+      --text-muted:#8d8778;
+      --border:rgba(201,162,39,.16);
+      --border-strong:rgba(201,162,39,.3);
+      --font-ui:'JetBrains Mono',monospace;
+      --font-body:'Inter',sans-serif;
+      --font-serif:'Iowan Old Style',Georgia,'Times New Roman',serif;
+      --radius-sm:6px;
+      --radius-md:10px;
+      --radius-lg:14px;
+      --ease:cubic-bezier(0.16,1,0.3,1);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      min-height:100vh;background:var(--bg-deep);color:var(--text);
+      font-family:var(--font-body);-webkit-font-smoothing:antialiased;
+      overflow-x:hidden
+    }
+
+    /* ===== SAME BACKGROUND AS THE PORTFOLIO DESKTOP ===== */
+    .wp{position:fixed;inset:0;z-index:-2;
+      background:
+        radial-gradient(ellipse at 22% 26%,rgba(201,162,39,.055) 0%,transparent 52%),
+        radial-gradient(ellipse at 74% 72%,rgba(126,146,178,.045) 0%,transparent 44%),
+        linear-gradient(165deg,#06070a,#0a0c11 25%,#0d1016 52%,#0a0c11 76%,#06070a)
+    }
+    .grid{position:fixed;inset:0;z-index:-1;
+      background-image:
+        linear-gradient(rgba(201,162,39,.035) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(201,162,39,.035) 1px,transparent 1px);
+      background-size:60px 60px
+    }
+    /* CRT vignette, same feel as the OS */
+    .crt{position:fixed;inset:0;pointer-events:none;z-index:9}
+    .crt::before{content:'';position:absolute;inset:0;
+      background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.02) 2px,rgba(0,0,0,.02) 4px)}
+    .crt::after{content:'';position:absolute;inset:0;
+      background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.5) 100%)}
+
+    /* ===== RETURN-TO-PORTFOLIO LOGO (top left) ===== */
+    .home{
+      position:fixed;top:16px;left:16px;z-index:60;
+      width:44px;height:44px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      text-decoration:none;outline:none;
+      transition:transform .2s var(--ease)
+    }
+    .home img{
+      width:40px;height:40px;object-fit:contain;
+      filter:drop-shadow(0 0 0 rgba(var(--accent-rgb),0));
+      transition:filter .25s ease,transform .2s var(--ease)
+    }
+    .home:hover img,.home:focus-visible img{
+      transform:scale(1.04);
+      filter:drop-shadow(0 0 8px rgba(217,185,106,.55)) drop-shadow(0 0 20px rgba(217,185,106,.3))
+    }
+    .home-tip{
+      position:absolute;top:calc(100% + 8px);left:0;
+      width:198px;padding:8px 10px;border-radius:var(--radius-sm);
+      background:rgba(12,14,18,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      border:1px solid var(--border);box-shadow:0 10px 26px rgba(0,0,0,.5);
+      opacity:0;transform:translateY(-4px);pointer-events:none;
+      transition:opacity .18s ease,transform .18s ease;
+      text-align:left
+    }
+    .home:hover .home-tip,.home:focus-visible .home-tip{opacity:1;transform:translateY(0)}
+    .home-tip b{display:block;font:500 10px/1.4 var(--font-ui);color:var(--accent);letter-spacing:.4px;text-transform:uppercase}
+    .home-tip span{display:block;margin-top:3px;font:10px/1.5 var(--font-ui);color:var(--text-muted);letter-spacing:.2px}
+
+    /* ===== LAYOUT ===== */
+    main{position:relative;z-index:2;max-width:900px;margin:0 auto;padding:0 24px 90px}
+
+    .hero{padding:96px 0 44px;text-align:center;animation:rise .7s var(--ease) both}
+    .hero h1{
+      font-family:var(--font-serif);font-size:clamp(28px,5vw,42px);font-weight:600;
+      letter-spacing:-.4px;line-height:1.15;color:var(--text)
+    }
+    .hero .sub{
+      margin:12px auto 0;max-width:560px;
+      font-family:var(--font-serif);font-style:italic;font-size:14px;line-height:1.65;
+      color:var(--text-dim)
+    }
+    .hero .rule{
+      width:74px;height:1px;margin:22px auto 0;
+      background:linear-gradient(90deg,transparent,var(--border-strong),transparent)
+    }
+    @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+    /* ===== CLASS SECTIONS ===== */
+    .cls{margin-bottom:46px;animation:rise .7s var(--ease) both}
+    .cls:nth-child(2){animation-delay:.08s}
+    .cls:nth-child(3){animation-delay:.16s}
+    .cls:nth-child(4){animation-delay:.24s}
+
+    .cls-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+      padding-bottom:9px;border-bottom:1px solid var(--border)}
+    .cls-head h2{
+      font-family:var(--font-serif);font-size:23px;font-weight:600;letter-spacing:-.2px;color:var(--text)
+    }
+    .cls-head .meta{
+      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase
+    }
+    .cls-head .meta b{color:var(--accent);font-weight:500}
+    .cls-blurb{margin:10px 0 14px;font-size:12px;line-height:1.7;color:var(--text-muted)}
+
+    /* ===== CHAPTER ACCORDIONS ===== */
+    .ch{
+      border:1px solid rgba(var(--accent-rgb),.1);
+      background:rgba(255,255,255,.012);
+      border-radius:var(--radius-md);margin-bottom:7px;overflow:hidden;
+      transition:border-color .18s ease,background .18s ease
+    }
+    .ch:hover{border-color:rgba(var(--accent-rgb),.2);background:rgba(255,255,255,.022)}
+    .ch[open]{border-color:rgba(var(--accent-rgb),.24);background:rgba(255,255,255,.025)}
+
+    .ch summary{
+      list-style:none;cursor:pointer;user-select:none;
+      display:flex;align-items:center;gap:12px;
+      padding:11px 14px;
+      font:12px/1.3 var(--font-ui);color:var(--text-dim);
+      transition:color .15s ease
+    }
+    .ch summary::-webkit-details-marker{display:none}
+    .ch summary:hover{color:var(--text)}
+    .ch summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
+    .ch .num{
+      font:10px/1 var(--font-ui);letter-spacing:1px;color:var(--accent);opacity:.65;flex-shrink:0;
+      min-width:22px
+    }
+    .ch .name{font-family:var(--font-body);font-size:13px;font-weight:500;color:inherit;flex:1;min-width:0}
+    .ch .cnt{
+      font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.4px;flex-shrink:0
+    }
+    .ch .cv{
+      width:14px;height:14px;flex-shrink:0;position:relative;
+      transition:transform .2s var(--ease)
+    }
+    .ch .cv::before,.ch .cv::after{
+      content:'';position:absolute;left:50%;top:50%;background:currentColor;border-radius:1px;
+      transform:translate(-50%,-50%);opacity:.55
+    }
+    .ch .cv::before{width:10px;height:1.5px}
+    .ch .cv::after{width:1.5px;height:10px;transition:opacity .2s ease}
+    .ch[open] .cv::after{opacity:0}
+
+    .ch-body{padding:2px 14px 13px 48px}
+    .briefs{list-style:none;display:flex;flex-direction:column;gap:5px}
+    .briefs li{position:relative}
+    .brief{
+      display:flex;align-items:center;gap:9px;
+      padding:7px 10px;border-radius:var(--radius-sm);
+      border:1px solid rgba(var(--accent-rgb),.08);
+      background:rgba(255,255,255,.015);
+      text-decoration:none;color:var(--text-dim);
+      transition:all .16s ease
+    }
+    .brief:hover{
+      border-color:rgba(var(--accent-rgb),.28);background:rgba(var(--accent-rgb),.07);
+      color:var(--text);transform:translateX(2px)
+    }
+    .brief .ic{font-size:11px;opacity:.65;flex-shrink:0}
+    .brief .nm{font-size:12.5px;font-weight:500;line-height:1.4}
+    .brief .ci{
+      margin-left:auto;font:10px/1 var(--font-ui);color:var(--text-muted);
+      letter-spacing:.3px;flex-shrink:0;padding-left:10px
+    }
+    .pending{
+      display:flex;align-items:center;gap:9px;padding:7px 10px;
+      font:11px/1.5 var(--font-ui);color:var(--text-muted);letter-spacing:.2px;opacity:.75
+    }
+    .pending .dot{width:4px;height:4px;border-radius:50%;background:var(--text-muted);opacity:.6;flex-shrink:0}
+
+    /* ===== MOBILE ===== */
+    @media(max-width:640px){
+      .grid{background-size:40px 40px}
+      main{padding:0 16px 72px}
+      .hero{padding:82px 0 34px}
+      .hero .sub{font-size:13px}
+      .home{top:12px;left:12px}
+      .home-tip{width:172px}
+      .cls-head h2{font-size:20px}
+      .cls-head .meta{margin-left:0;width:100%}
+      .ch summary{padding:10px 12px;gap:9px}
+      .ch-body{padding:2px 12px 12px 12px}
+      .brief .ci{display:none}
+      .cls{margin-bottom:38px}
+    }
+    @media (prefers-reduced-motion:reduce){
+      *{animation:none!important;transition:none!important}
+    }
+  </style>
+</head>
+<body>
+
+<div class="wp"></div>
+<div class="grid"></div>
+<div class="crt"></div>
+
+<!-- Return to the portfolio: relaunches Walker.OS and lands on Professional Works -->
+<a class="home" href="../index.html?mode=professional&amp;open=work" title="Back to the portfolio website">
+  <img src="../assets/WLogoPFP.png" alt="Walker Birchfield — back to portfolio" />
+  <span class="home-tip">
+    <b>Back to Portfolio</b>
+    <span>Returns you to Walker.OS &mdash; after the launch sequence, on Professional Works.</span>
+  </span>
+</a>
+
+<main>
+  <header class="hero">
+    <h1>Walker&rsquo;s Law Library</h1>
+    <p class="sub">A collection of case briefs and other supporting documents used throughout law school.</p>
+    <div class="rule"></div>
+  </header>
+
+  <div id="classes"></div>
+</main>
+
+<script src="briefs-data.js"></script>
+<script>
+  ;(() => {
+    const DATA = window.LAW_LIBRARY || [];
+    const root = document.getElementById('classes');
+
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const pad = n => String(n).padStart(2, '0');
+
+    function briefRow(c) {
+      const name = esc(c.name);
+      const cite = c.cite ? esc(c.cite) : '';
+      if (c.file) {
+        return `<li><a class="brief" href="${esc(c.file)}" target="_blank" rel="noopener">
+            <span class="ic">PDF</span><span class="nm">${name}</span>
+            ${cite ? `<span class="ci">${cite}</span>` : ''}
+          </a></li>`;
+      }
+      return `<li><div class="pending"><span class="dot"></span>
+          <span class="nm">${name}</span>${cite ? `<span class="ci">${cite}</span>` : ''}
+        </div></li>`;
+    }
+
+    function chapter(ch, i) {
+      const cases = (ch.cases || []).filter(c => c && c.name);
+      const count = cases.length;
+      const body = count
+        ? `<ul class="briefs">${cases.map(briefRow).join('')}</ul>`
+        : `<div class="pending"><span class="dot"></span>No briefs added yet.</div>`;
+      return `<details class="ch">
+          <summary>
+            <span class="num">${pad(i + 1)}</span>
+            <span class="name">${esc(ch.title)}</span>
+            <span class="cnt">${count ? count + (count === 1 ? ' brief' : ' briefs') : '&mdash;'}</span>
+            <span class="cv"></span>
+          </summary>
+          <div class="ch-body">${body}</div>
+        </details>`;
+    }
+
+    function section(cls, i) {
+      const chapters = cls.chapters || [];
+      const total = chapters.reduce((n, ch) => n + (ch.cases || []).filter(c => c && c.name).length, 0);
+      return `<section class="cls" id="${esc(cls.id || 'class-' + i)}">
+          <div class="cls-head">
+            <h2>${esc(cls.name)}</h2>
+            <span class="meta">${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
+          </div>
+          ${cls.blurb ? `<p class="cls-blurb">${esc(cls.blurb)}</p>` : ''}
+          <div class="chapters">${chapters.map(chapter).join('')}</div>
+        </section>`;
+    }
+
+    root.innerHTML = DATA.length
+      ? DATA.map(section).join('')
+      : `<div class="pending"><span class="dot"></span>Library data not found.</div>`;
+  })();
+</script>
+</body>
+</html>
