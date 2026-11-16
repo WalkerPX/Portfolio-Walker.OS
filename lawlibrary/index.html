@@ -96,9 +96,9 @@
     .home-tip span{display:block;margin-top:3px;font:10px/1.5 var(--font-ui);color:var(--text-muted);letter-spacing:.2px}
 
     /* ===== LAYOUT ===== */
-    main{position:relative;z-index:2;max-width:900px;margin:0 auto;padding:0 24px 90px}
+    main{position:relative;z-index:2;max-width:860px;margin:0;padding:0 24px 90px max(48px,6vw)}
 
-    .hero{padding:96px 0 44px;text-align:center;animation:rise .7s var(--ease) both}
+    .hero{padding:54px 0 30px;text-align:center;animation:rise .7s var(--ease) both}
     .hero h1{
       font-family:var(--font-serif);font-size:clamp(28px,5vw,42px);font-weight:600;
       letter-spacing:-.4px;line-height:1.15;color:var(--text)
@@ -114,8 +114,42 @@
     }
     @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
+    /* ===== TERM DROPDOWN (e.g. 1L Fall) ===== */
+    .term{
+      border:1px solid var(--border);border-radius:var(--radius-md);
+      background:rgba(255,255,255,.012);overflow:hidden
+    }
+    .term>summary{
+      list-style:none;cursor:pointer;user-select:none;
+      display:flex;align-items:center;gap:10px;
+      padding:13px 15px;
+      background:rgba(var(--accent-rgb),.05);
+      font:500 11px/1 var(--font-ui);letter-spacing:1.8px;text-transform:uppercase;
+      color:var(--accent);
+      transition:background .16s ease,color .16s ease
+    }
+    .term>summary::-webkit-details-marker{display:none}
+    .term>summary:hover{background:rgba(var(--accent-rgb),.09);color:var(--text)}
+    .term>summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
+    .term[open]>summary{border-bottom:1px solid rgba(var(--accent-rgb),.14)}
+    .term .tcv{width:14px;height:14px;flex-shrink:0;position:relative;transition:transform .22s var(--ease)}
+    .term .tcv::before,.term .tcv::after{
+      content:'';position:absolute;left:50%;top:50%;background:currentColor;border-radius:1px;
+      transform:translate(-50%,-50%);opacity:.7
+    }
+    .term .tcv::before{width:10px;height:1.5px}
+    .term .tcv::after{width:1.5px;height:10px;transition:opacity .2s ease}
+    .term[open] .tcv::after{opacity:0}
+    .term .tmeta{
+      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;
+      text-transform:none;color:var(--text-muted)
+    }
+    .term .tmeta b{color:var(--accent);font-weight:500}
+    .term-body{padding:20px 16px 4px}
+
     /* ===== CLASS SECTIONS ===== */
-    .cls{margin-bottom:46px;animation:rise .7s var(--ease) both}
+    .cls{margin-bottom:38px;animation:rise .7s var(--ease) both}
+    .cls:last-child{margin-bottom:22px}
     .cls:nth-child(2){animation-delay:.08s}
     .cls:nth-child(3){animation-delay:.16s}
     .cls:nth-child(4){animation-delay:.24s}
@@ -155,6 +189,8 @@
       font:10px/1 var(--font-ui);letter-spacing:1px;color:var(--accent);opacity:.65;flex-shrink:0;
       min-width:22px
     }
+    .ch .num.tag{letter-spacing:.5px;min-width:46px;opacity:.8}
+    .ch .pg{font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.3px;flex-shrink:0;opacity:.8}
     .ch .name{font-family:var(--font-body);font-size:13px;font-weight:500;color:inherit;flex:1;min-width:0}
     .ch .cnt{
       font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.4px;flex-shrink:0
@@ -275,11 +311,15 @@
       const body = count
         ? `<ul class="briefs">${cases.map(briefRow).join('')}</ul>`
         : `<div class="pending"><span class="dot"></span>No briefs added yet.</div>`;
+      const label = ch.tag
+        ? `<span class="num tag">${esc(ch.tag)}</span>`
+        : `<span class="num">${pad(i + 1)}</span>`;
       return `<details class="ch">
           <summary>
-            <span class="num">${pad(i + 1)}</span>
+            ${label}
             <span class="name">${esc(ch.title)}</span>
-            <span class="cnt">${count ? count + (count === 1 ? ' brief' : ' briefs') : '&mdash;'}</span>
+            ${ch.pages ? `<span class="pg">pp. ${esc(ch.pages)}</span>` : ''}
+            <span class="cnt">${count ? count + (count === 1 ? ' brief' : ' briefs') : ''}</span>
             <span class="cv"></span>
           </summary>
           <div class="ch-body">${body}</div>
@@ -289,18 +329,34 @@
     function section(cls, i) {
       const chapters = cls.chapters || [];
       const total = chapters.reduce((n, ch) => n + (ch.cases || []).filter(c => c && c.name).length, 0);
+      const course = [cls.code, cls.teacher].filter(Boolean).join(' &middot; ');
       return `<section class="cls" id="${esc(cls.id || 'class-' + i)}">
           <div class="cls-head">
             <h2>${esc(cls.name)}</h2>
-            <span class="meta">${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
+            <span class="meta">${course ? course + ' &middot; ' : ''}${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
           </div>
           ${cls.blurb ? `<p class="cls-blurb">${esc(cls.blurb)}</p>` : ''}
           <div class="chapters">${chapters.map(chapter).join('')}</div>
         </section>`;
     }
 
+    function term(t, i) {
+      const classes = t.classes || [];
+      const chapters = classes.reduce((n, c) => n + (c.chapters || []).length, 0);
+      const briefs = classes.reduce((n, c) => n + (c.chapters || [])
+        .reduce((m, ch) => m + (ch.cases || []).filter(x => x && x.name).length, 0), 0);
+      return `<details class="term" id="${esc(t.id || 'term-' + i)}" open>
+          <summary>
+            <span class="tcv"></span>
+            <span>${esc(t.name)}</span>
+            <span class="tmeta">${classes.length} class${classes.length === 1 ? '' : 'es'} &middot; ${chapters} chapters &middot; <b>${briefs}</b> brief${briefs === 1 ? '' : 's'}</span>
+          </summary>
+          <div class="term-body">${classes.map(section).join('')}</div>
+        </details>`;
+    }
+
     root.innerHTML = DATA.length
-      ? DATA.map(section).join('')
+      ? DATA.map(term).join('')
       : `<div class="pending"><span class="dot"></span>Library data not found.</div>`;
   })();
 </script>
