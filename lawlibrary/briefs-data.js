@@ -4,7 +4,7 @@
    Structure:  terms → classes → chapters → cases
 
      terms:    [{ id, name, classes: [...] }]     e.g. 1L Fall
-     classes:  { id, name, code, teacher, blurb, chapters }
+     classes:  { id, name, code, teacher, chapters }
      chapters: { title, pages | tag, cases: [...] }
 
    Add a brief by dropping a line into the chapter's `cases` array:
@@ -27,7 +27,6 @@ window.LAW_LIBRARY = [
         name: 'Contracts',
         code: 'Law D511',
         teacher: 'Prof. Lourie',
-        blurb: 'Knapp, Crystal, Prince, Hart & Silverstein, Problems in Contract Law (10th ed. 2023). Chapters follow the projected reading schedule.',
         chapters: [
           { title: 'Introduction to Contract Law', pages: '1–22', cases: [] },
           { title: 'Mutual Assent', pages: '23–84', cases: [] },
@@ -59,7 +58,6 @@ window.LAW_LIBRARY = [
         name: 'Property',
         code: 'Law D509',
         teacher: 'Prof. Mitchell',
-        blurb: 'Possession and ownership, estates in land, co-tenancies, landlord–tenant, non-possessory interests, land sale and title. Organized by the six course units.',
         chapters: [
           { title: 'Possession & Ownership', tag: 'Unit 1', cases: [] },
           { title: 'Estates in Land', tag: 'Unit 2', cases: [] },
@@ -73,7 +71,6 @@ window.LAW_LIBRARY = [
         id: 'torts',
         name: 'Torts',
         code: 'Law D541',
-        blurb: 'Intentional and unintentional interference with protected interests, strict liability and its extensions, defenses, and the torts compensation system.',
         chapters: [
           { title: 'Introduction to Tort Liability', cases: [] },
           { title: 'Battery, Assault & False Imprisonment', cases: [] },

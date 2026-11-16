@@ -84,7 +84,7 @@
     }
     .home-tip{
       position:absolute;top:calc(100% + 8px);left:0;
-      width:198px;padding:8px 10px;border-radius:var(--radius-sm);
+      width:max-content;padding:7px 11px;border-radius:var(--radius-sm);
       background:rgba(12,14,18,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
       border:1px solid var(--border);box-shadow:0 10px 26px rgba(0,0,0,.5);
       opacity:0;transform:translateY(-4px);pointer-events:none;
@@ -93,15 +93,30 @@
     }
     .home:hover .home-tip,.home:focus-visible .home-tip{opacity:1;transform:translateY(0)}
     .home-tip b{display:block;font:500 10px/1.4 var(--font-ui);color:var(--accent);letter-spacing:.4px;text-transform:uppercase}
-    .home-tip span{display:block;margin-top:3px;font:10px/1.5 var(--font-ui);color:var(--text-muted);letter-spacing:.2px}
 
     /* ===== LAYOUT ===== */
     main{position:relative;z-index:2;max-width:860px;margin:0;padding:0 24px 90px max(48px,6vw)}
 
-    .hero{padding:54px 0 30px;text-align:center;animation:rise .7s var(--ease) both}
+    /* Title block — centred on the page, independent of the left-shifted list */
+    .hero{position:relative;z-index:2;max-width:900px;margin:0 auto;padding:54px 24px 22px;
+      text-align:center;animation:rise .7s var(--ease) both}
     .hero h1{
       font-family:var(--font-serif);font-size:clamp(28px,5vw,42px);font-weight:600;
       letter-spacing:-.4px;line-height:1.15;color:var(--text)
+    }
+    /* very slight shimmer sweeping across the lettering */
+    @supports ((-webkit-background-clip:text) or (background-clip:text)){
+      .hero h1{
+        background:linear-gradient(100deg,#f4f1e9 0%,#f4f1e9 38%,#fffaec 48%,#fff6df 52%,#f4f1e9 62%,#f4f1e9 100%);
+        background-size:260% 100%;
+        -webkit-background-clip:text;background-clip:text;
+        -webkit-text-fill-color:transparent;color:transparent;
+        animation:shimmer 11s ease-in-out infinite
+      }
+    }
+    @keyframes shimmer{
+      0%{background-position:135% 0}
+      45%,100%{background-position:-35% 0}
     }
     .hero .sub{
       margin:12px auto 0;max-width:560px;
@@ -148,22 +163,35 @@
     .term-body{padding:20px 16px 4px}
 
     /* ===== CLASS SECTIONS ===== */
-    .cls{margin-bottom:38px;animation:rise .7s var(--ease) both}
+    .cls{
+      border:1px solid rgba(var(--accent-rgb),.1);
+      background:rgba(255,255,255,.012);
+      border-radius:var(--radius-md);margin-bottom:9px;overflow:hidden;
+      transition:border-color .18s ease,background .18s ease
+    }
     .cls:last-child{margin-bottom:22px}
-    .cls:nth-child(2){animation-delay:.08s}
-    .cls:nth-child(3){animation-delay:.16s}
-    .cls:nth-child(4){animation-delay:.24s}
+    .cls:hover{border-color:rgba(var(--accent-rgb),.2);background:rgba(255,255,255,.022)}
+    .cls[open]{border-color:rgba(var(--accent-rgb),.22);background:rgba(255,255,255,.025)}
 
-    .cls-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
-      padding-bottom:9px;border-bottom:1px solid var(--border)}
-    .cls-head h2{
-      font-family:var(--font-serif);font-size:23px;font-weight:600;letter-spacing:-.2px;color:var(--text)
+    .cls>summary{
+      list-style:none;cursor:pointer;user-select:none;
+      display:flex;align-items:center;gap:12px;
+      padding:13px 16px;transition:background .16s ease
     }
-    .cls-head .meta{
-      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase
+    .cls>summary::-webkit-details-marker{display:none}
+    .cls>summary:hover{background:rgba(var(--accent-rgb),.05)}
+    .cls>summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
+    .cls[open]>summary{border-bottom:1px solid rgba(var(--accent-rgb),.12)}
+    .cls>summary h2{
+      font-family:var(--font-serif);font-size:21px;font-weight:600;letter-spacing:-.2px;
+      color:var(--text);flex-shrink:0
     }
-    .cls-head .meta b{color:var(--accent);font-weight:500}
-    .cls-blurb{margin:10px 0 14px;font-size:12px;line-height:1.7;color:var(--text-muted)}
+    .cls .cmeta{
+      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;
+      color:var(--text-muted);text-transform:uppercase;text-align:right
+    }
+    .cls .cmeta b{color:var(--accent);font-weight:500}
+    .cls-body{padding:12px 14px 14px}
 
     /* ===== CHAPTER ACCORDIONS ===== */
     .ch{
@@ -195,17 +223,17 @@
     .ch .cnt{
       font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.4px;flex-shrink:0
     }
-    .ch .cv{
+    .cv{
       width:14px;height:14px;flex-shrink:0;position:relative;
       transition:transform .2s var(--ease)
     }
-    .ch .cv::before,.ch .cv::after{
+    .cv::before,.cv::after{
       content:'';position:absolute;left:50%;top:50%;background:currentColor;border-radius:1px;
       transform:translate(-50%,-50%);opacity:.55
     }
-    .ch .cv::before{width:10px;height:1.5px}
-    .ch .cv::after{width:1.5px;height:10px;transition:opacity .2s ease}
-    .ch[open] .cv::after{opacity:0}
+    .cv::before{width:10px;height:1.5px}
+    .cv::after{width:1.5px;height:10px;transition:opacity .2s ease}
+    .ch[open]>summary .cv::after,.cls[open]>summary .cv::after{opacity:0}
 
     .ch-body{padding:2px 14px 13px 48px}
     .briefs{list-style:none;display:flex;flex-direction:column;gap:5px}
@@ -238,16 +266,18 @@
     @media(max-width:640px){
       .grid{background-size:40px 40px}
       main{padding:0 16px 72px}
-      .hero{padding:82px 0 34px}
+      .hero{padding:64px 16px 18px}
       .hero .sub{font-size:13px}
       .home{top:12px;left:12px}
-      .home-tip{width:172px}
-      .cls-head h2{font-size:20px}
-      .cls-head .meta{margin-left:0;width:100%}
+      .cls>summary{padding:12px 14px;gap:10px;flex-wrap:wrap}
+      .cls>summary h2{font-size:19px}
+      .cls .cmeta{margin-left:0;width:100%;text-align:left;order:3}
+      .cls-body{padding:10px 10px 12px}
       .ch summary{padding:10px 12px;gap:9px}
+      .ch .pg{display:none}
       .ch-body{padding:2px 12px 12px 12px}
       .brief .ci{display:none}
-      .cls{margin-bottom:38px}
+      .term-body{padding:14px 10px 4px}
     }
     @media (prefers-reduced-motion:reduce){
       *{animation:none!important;transition:none!important}
@@ -265,17 +295,16 @@
   <img src="../assets/WLogoPFP.png" alt="Walker Birchfield — back to portfolio" />
   <span class="home-tip">
     <b>Back to Portfolio</b>
-    <span>Returns you to Walker.OS &mdash; after the launch sequence, on Professional Works.</span>
   </span>
 </a>
 
-<main>
-  <header class="hero">
-    <h1>Walker&rsquo;s Law Library</h1>
-    <p class="sub">A collection of case briefs and other supporting documents used throughout law school.</p>
-    <div class="rule"></div>
-  </header>
+<header class="hero">
+  <h1>Walker&rsquo;s Law Library</h1>
+  <p class="sub">A collection of case briefs and other supporting documents used throughout law school.</p>
+  <div class="rule"></div>
+</header>
 
+<main>
   <div id="classes"></div>
 </main>
 
@@ -330,14 +359,14 @@
       const chapters = cls.chapters || [];
       const total = chapters.reduce((n, ch) => n + (ch.cases || []).filter(c => c && c.name).length, 0);
       const course = [cls.code, cls.teacher].filter(Boolean).join(' &middot; ');
-      return `<section class="cls" id="${esc(cls.id || 'class-' + i)}">
-          <div class="cls-head">
+      return `<details class="cls" id="${esc(cls.id || 'class-' + i)}" open>
+          <summary>
             <h2>${esc(cls.name)}</h2>
-            <span class="meta">${course ? course + ' &middot; ' : ''}${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
-          </div>
-          ${cls.blurb ? `<p class="cls-blurb">${esc(cls.blurb)}</p>` : ''}
-          <div class="chapters">${chapters.map(chapter).join('')}</div>
-        </section>`;
+            <span class="cmeta">${course ? course + ' &middot; ' : ''}${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
+            <span class="cv"></span>
+          </summary>
+          <div class="cls-body">${chapters.map(chapter).join('')}</div>
+        </details>`;
     }
 
     function term(t, i) {
