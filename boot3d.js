@@ -8,10 +8,6 @@
 import * as THREE from 'three'
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { BokehPass } from 'three/addons/postprocessing/BokehPass.js'
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 
 const bootEl = document.getElementById('boot')
 const screenEl = document.getElementById('screen')
@@ -25,15 +21,26 @@ const SCREEN_PX = { w: 800, h: 500 }
 const SCREEN_W = 1.76
 const SCREEN_POS = new THREE.Vector3(0, 1.17, 0.075)
 
-const ROOM = { l: -5.8, r: 6.2, back: -1.6, front: 7.6, floor: -1.15, ceil: 3.6 }
+const ROOM = { l: -6.2, r: 7.4, back: -1.6, front: 9.0, floor: -1.15, ceil: 3.6 }
 const ROOM_W = ROOM.r - ROOM.l, ROOM_D = ROOM.front - ROOM.back, ROOM_H = ROOM.ceil - ROOM.floor
 const MID = { x: (ROOM.l + ROOM.r) / 2, z: (ROOM.back + ROOM.front) / 2, y: (ROOM.floor + ROOM.ceil) / 2 }
 const C = new THREE.Vector3(0.2, 1.45, 2.2) // ceiling fixture
 // first-person walker: eye height, speeds (units/s), body radius, start pose, look limits
-const WALK = { eye: 1.7, speed: 2.0, run: 3.4, radius: 0.32, home: new THREE.Vector3(0.87, 1.7, 5.2), yaw0: 0.22, pitch0: 0.1, pitch: [-0.75, 0.95] }
+// pitch: [up, down] look limits; down reaches almost to the floor at your feet
+const WALK = { eye: 1.7, speed: 2.0, run: 5.2, radius: 0.32, home: new THREE.Vector3(0.87, 1.7, 5.2), yaw0: 0.22, pitch0: 0.1, pitch: [-0.75, 1.38] }
+// jumping + momentum: ground accel/friction, air control that rewards strafing (b-hop), a speed ceiling
+const MOVE_PHYS = { jump: 4.9, grav: 14, accel: 9, friction: 4.5, stop: 1.0, airAccel: 10, airCap: 0.6, max: 8.5, buffer: 0.14 }
+// doorway in the main room's front wall, leading into the second room
+const DOOR_X = ROOM.r - 1.5, DOOR_W = 1.55, DOOR_H = 3.5, WALL_T = 0.24
+// second room: a mini ballpark (home plate near the doorway, mound and fence beyond) with a half-court corner
+const R2 = { l: ROOM.l, r: ROOM.r, back: ROOM.front + WALL_T, front: ROOM.front + WALL_T + 22, floor: ROOM.floor, ceil: 6.2 }
+const R2_W = R2.r - R2.l, R2_D = R2.front - R2.back, R2_H = R2.ceil - R2.floor
+const R2_MID = { x: (R2.l + R2.r) / 2, z: (R2.back + R2.front) / 2, y: (R2.floor + R2.ceil) / 2 }
+const PLATE_X = 0.6, PLATE_Z = R2.back + 3.8, MOUND_DIST = 8.5
 // official logo files for the glowing wall marks (e.g. 'assets/logos/purdue.svg'); empty = built-in outlines
 const TEAM_SVG = { purdue: '', iu: '' }
-const HOOP_X = 1.45, RIM_R = 0.18, BALL_R = 0.09, GRAV = 12
+// the hoop hangs on the second room's back wall, in the corner behind home plate
+const HOOP_X = -3.9, RIM_R = 0.18, BALL_R = 0.09, GRAV = 12
 const WIN = { z: 2.6, y: 1.35, w: 1.8, h: 1.5 }
 
 function hasWebGL() {
@@ -44,9 +51,9 @@ function hasWebGL() {
 if (bootEl && screenEl && hasWebGL() && !bootEl.classList.contains('hidden')) {
   init().catch((err) => {
     console.warn('[boot3d] falling back to 2D monitor:', err)
-    bootEl.classList.remove('three-on')
+    bootEl.classList.remove('three-on', 'three-pending')
   })
-}
+} else bootEl?.classList.remove('three-pending')
 
 async function init() {
   const ACC = new THREE.Color(P.acc2)
@@ -71,8 +78,8 @@ async function init() {
   const keysEl = document.createElement('div')
   keysEl.className = 'room-keys'
   keysEl.innerHTML = COARSE
-    ? '<b>Pad</b> walk · <b>Drag</b> look · <b>Tap</b> ball to grab'
-    : '<b>Click</b> to look · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <b>Click</b> ball, <kbd>R</kbd> shoot · <kbd>Esc</kbd> free mouse'
+    ? '<b>Pad</b> walk · <b>Drag</b> look'
+    : '<kbd>WASD</kbd> move · <kbd>Shift</kbd> sprint · <kbd>Space</kbd> jump'
   const crossEl = document.createElement('div')
   crossEl.className = 'room-cross'
   bootEl.append(crossEl)
@@ -81,9 +88,29 @@ async function init() {
   padEl.innerHTML = [['KeyW', '▲', 'u'], ['KeyA', '◀', 'l'], ['KeyS', '▼', 'd'], ['KeyD', '▶', 'r']]
     .map(([k, s, c]) => `<button type="button" class="${c}" data-k="${k}" aria-label="Walk ${{ u: 'forward', d: 'back', l: 'left', r: 'right' }[c]}">${s}</button>`).join('') +
     '<button type="button" class="shoot" data-k="shoot">Shoot</button>'
-  bootEl.append(cueEl, backEl, keysEl, padEl)
+  // shot meter (fill + green window), derby HUD, exit button and round summary
+  const meterEl = document.createElement('div')
+  meterEl.className = 'shot-meter'
+  meterEl.setAttribute('aria-hidden', 'true')
+  meterEl.innerHTML = '<div class="g"></div><div class="f"></div>'
+  const meterG = meterEl.querySelector('.g'), meterF = meterEl.querySelector('.f')
+  const derbyHud = document.createElement('div')
+  derbyHud.className = 'derby-hud'
+  derbyHud.setAttribute('aria-live', 'polite')
+  const derbyExit = document.createElement('button')
+  derbyExit.type = 'button'
+  derbyExit.className = 'room-back'
+  derbyExit.textContent = '← Exit derby'
+  const derbySum = document.createElement('div')
+  derbySum.className = 'derby-sum'
+  derbySum.setAttribute('role', 'dialog')
+  derbySum.setAttribute('aria-label', 'Home Run Derby results')
+  bootEl.append(cueEl, backEl, keysEl, padEl, meterEl, derbyHud, derbyExit, derbySum)
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+  // alpha: the monitor glass is cut out of the WebGL image (depth-tested), and the live #screen
+  // DOM layer sits underneath the canvas, so walls and furniture in front of the monitor hide it
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+  renderer.setClearColor('#05050a', 1)
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -94,22 +121,13 @@ async function init() {
 
   const css = new CSS3DRenderer()
   css.domElement.className = 'css3d'
-  stage.appendChild(css.domElement)
+  stage.insertBefore(css.domElement, renderer.domElement) // DOM screen below, WebGL on top
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color('#05050a')
-  scene.fog = new THREE.Fog('#05050a', 12, 30)
+  scene.fog = new THREE.Fog('#05050a', 18, 48)
   const cssScene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 80)
 
-  let composer = null, bokeh = null
-  if (!REDUCE) {
-    composer = new EffectComposer(renderer)
-    composer.addPass(new RenderPass(scene, camera))
-    bokeh = new BokehPass(scene, camera, { focus: 5, aperture: 0.0014, maxblur: 0.005 })
-    composer.addPass(bokeh)
-    composer.addPass(new OutputPass())
-  }
 
   // ---------- helpers ----------
   const std = (color, roughness = 0.6, metalness = 0.2, extra = {}) =>
@@ -153,22 +171,34 @@ async function init() {
   const deskMat = std('#15131d', 0.7, 0.08)
 
   // ---------- room shell ----------
+  const blockers = [] // solid surfaces: clicks and hover rays stop at these instead of passing through
   const floor = add(new THREE.PlaneGeometry(ROOM_W, ROOM_D), std('#0a0a12', 0.88, 0.05), MID.x, ROOM.floor, MID.z, scene, false)
   floor.rotation.x = -Math.PI / 2
   const ceil = add(new THREE.PlaneGeometry(ROOM_W, ROOM_D), std('#08080f', 1, 0), MID.x, ROOM.ceil, MID.z, scene, false)
   ceil.rotation.x = Math.PI / 2
   const holeY = WIN.y - MID.y
   const back = add(new THREE.PlaneGeometry(ROOM_W, ROOM_H), wallMat, MID.x, MID.y, ROOM.back, scene, false)
-  const front = add(new THREE.PlaneGeometry(ROOM_W, ROOM_H), wallMat, MID.x, MID.y, ROOM.front, scene, false)
-  front.rotation.y = Math.PI
+  // front wall: solid either side of the doorway, with a lintel over it
+  const wallAround = (z, ry, top, mat) => {
+    const x0 = DOOR_X - DOOR_W / 2, x1 = DOOR_X + DOOR_W / 2, H = top - ROOM.floor
+    const parts = [[ROOM.l, x0, ROOM.floor, top], [x1, ROOM.r, ROOM.floor, top], [x0, x1, ROOM.floor + DOOR_H, top]]
+    for (const [a, b, y0, y1] of parts) {
+      const m = add(new THREE.PlaneGeometry(b - a, y1 - y0), mat, (a + b) / 2, (y0 + y1) / 2, z, scene, false)
+      m.rotation.y = ry
+      blockers.push(m)
+    }
+    return H
+  }
+  wallAround(ROOM.front, Math.PI, ROOM.ceil, wallMat)
   const lw = add(wallWithHole(ROOM_D, ROOM_H, -(WIN.z - MID.z), holeY, WIN.w, WIN.h), wallMat, ROOM.l, MID.y, MID.z, scene, false)
   lw.rotation.y = FACE.left
   const rw = add(wallWithHole(ROOM_D, ROOM_H, WIN.z - MID.z, holeY, WIN.w, WIN.h), wallMat, ROOM.r, MID.y, MID.z, scene, false)
   rw.rotation.y = FACE.right
-  back.receiveShadow = front.receiveShadow = true
+  blockers.push(floor, ceil, back, lw, rw)
+  back.receiveShadow = true
   // baseboards
   add(new THREE.BoxGeometry(ROOM_W, 0.12, 0.03), frameMat, MID.x, ROOM.floor + 0.06, ROOM.back + 0.015, scene, false)
-  add(new THREE.BoxGeometry(ROOM_W, 0.12, 0.03), frameMat, MID.x, ROOM.floor + 0.06, ROOM.front - 0.015, scene, false)
+  for (const [a, b] of [[ROOM.l, DOOR_X - DOOR_W / 2 - 0.08], [DOOR_X + DOOR_W / 2 + 0.08, ROOM.r]]) add(new THREE.BoxGeometry(b - a, 0.12, 0.03), frameMat, (a + b) / 2, ROOM.floor + 0.06, ROOM.front - 0.015, scene, false)
   add(new THREE.BoxGeometry(0.03, 0.12, ROOM_D), frameMat, ROOM.l + 0.015, ROOM.floor + 0.06, MID.z, scene, false)
   add(new THREE.BoxGeometry(0.03, 0.12, ROOM_D), frameMat, ROOM.r - 0.015, ROOM.floor + 0.06, MID.z, scene, false)
   // rug + ceiling fixture
@@ -178,19 +208,70 @@ async function init() {
   const ceilMat = std('#202030', 0.4, 0, { emissive: new THREE.Color('#e6ecff'), emissiveIntensity: 1.4 })
   add(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 48), ceilMat, C.x, ROOM.ceil - 0.02, C.z, scene, false)
   add(new THREE.CylinderGeometry(0.47, 0.47, 0.02, 48), trim, C.x, ROOM.ceil - 0.005, C.z, scene, false)
-  // door on the front wall
+  // open doorway through the front wall into the second room: casing on both faces, lined passage
   // sized to the walker: eye 2.85 above the floor ≈ 1.65 m, so a 2.03 m × 0.9 m door is 3.5 × 1.55
-  const DOOR = { w: 1.55, h: 3.5 }
-  const door = group(4.4, ROOM.floor, ROOM.front, FACE.front)
-  const doorMat = std('#17172a', 0.7, 0.1)
-  add(rbox(DOOR.w - 0.06, DOOR.h, 0.05, 0.01), doorMat, 0, DOOR.h / 2, 0.03, door)
-  for (const y of [DOOR.h * 0.72, DOOR.h * 0.3]) add(rbox(DOOR.w - 0.42, DOOR.h * (y > 2 ? 0.36 : 0.44), 0.02, 0.01), std('#141426', 0.75, 0.1), 0, y, 0.06, door, false)
-  for (const [w, h, x, y] of [[DOOR.w + 0.16, 0.09, 0, DOOR.h + 0.045], [0.09, DOOR.h + 0.09, -(DOOR.w / 2 + 0.035), (DOOR.h + 0.09) / 2], [0.09, DOOR.h + 0.09, DOOR.w / 2 + 0.035, (DOOR.h + 0.09) / 2]])
-    add(new THREE.BoxGeometry(w, h, 0.08), frameMat, x, y, 0.04, door)
-  add(new THREE.SphereGeometry(0.045, 16, 12), trim, DOOR.w / 2 - 0.2, 1.75, 0.09, door) // handle at ~1 m
+  for (const [z, ry] of [[ROOM.front, FACE.front], [R2.back, FACE.back]]) {
+    const casing = group(DOOR_X, ROOM.floor, z, ry)
+    for (const [w, h, x, y] of [[DOOR_W + 0.16, 0.09, 0, DOOR_H + 0.045], [0.09, DOOR_H + 0.09, -(DOOR_W / 2 + 0.035), (DOOR_H + 0.09) / 2], [0.09, DOOR_H + 0.09, DOOR_W / 2 + 0.035, (DOOR_H + 0.09) / 2]])
+      add(new THREE.BoxGeometry(w, h, 0.08), frameMat, x, y, 0.04, casing)
+  }
+  const jambMat = std('#14142a', 0.85, 0.05)
+  for (const sx of [-1, 1]) blockers.push(add(new THREE.BoxGeometry(0.02, DOOR_H, WALL_T), jambMat, DOOR_X + sx * DOOR_W / 2, ROOM.floor + DOOR_H / 2, ROOM.front + WALL_T / 2, scene, false))
+  blockers.push(add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T), jambMat, DOOR_X, ROOM.floor + DOOR_H, ROOM.front + WALL_T / 2, scene, false))
+  add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T + 0.02), std('#1a1714', 0.7, 0.2), DOOR_X, ROOM.floor - 0.009, ROOM.front + WALL_T / 2, scene, false)
+  const doorSign = add(new THREE.PlaneGeometry(1.2, 0.15), labelMat('BALLPARK  →', { color: '#ffb547', w: 768, h: 96 }), DOOR_X, ROOM.floor + DOOR_H + 0.28, ROOM.front - 0.01, scene, false)
+  doorSign.rotation.y = Math.PI
+  doorSign.material.emissiveIntensity = 0.9
+
+  // ---------- second room: indoor mini ballpark + half court ----------
+  const turfMat = std('#1f4a2a', 0.95, 0, { map: canvasTex(512, 512, drawTurf) })
+  turfMat.map.wrapS = turfMat.map.wrapT = THREE.RepeatWrapping
+  turfMat.map.repeat.set(R2_W / 2.5, R2_D / 2.5)
+  const f2 = add(new THREE.PlaneGeometry(R2_W, R2_D), turfMat, R2_MID.x, R2.floor, R2_MID.z, scene, false)
+  f2.rotation.x = -Math.PI / 2
+  f2.receiveShadow = true
+  const c2 = add(new THREE.PlaneGeometry(R2_W, R2_D), std('#0b0d14', 1, 0), R2_MID.x, R2.ceil, R2_MID.z, scene, false)
+  c2.rotation.x = Math.PI / 2
+  const wall2 = std('#141a24', 0.92, 0)
+  wallAround(R2.back, FACE.back, R2.ceil, wall2)
+  const fence = add(new THREE.PlaneGeometry(R2_W, R2_H), wall2, R2_MID.x, R2_MID.y, R2.front, scene, false)
+  fence.rotation.y = Math.PI
+  blockers.push(f2, c2, fence)
+  for (const [x, ry] of [[R2.l, FACE.left], [R2.r, FACE.right]]) {
+    const m = add(new THREE.PlaneGeometry(R2_D, R2_H), wall2, x, R2_MID.y, R2_MID.z, scene, false)
+    m.rotation.y = ry
+    blockers.push(m)
+  }
+  // outfield wall padding with a yellow home-run line, distance markers, and a back-wall batter's eye
+  add(new THREE.BoxGeometry(R2_W, 1.6, 0.18), std('#123a24', 0.8, 0), R2_MID.x, R2.floor + 0.8, R2.front - 0.09, scene, false)
+  add(new THREE.BoxGeometry(R2_W, 0.05, 0.2), std('#3a2e05', 0.4, 0, { emissive: new THREE.Color('#ffd21f'), emissiveIntensity: 0.9 }), R2_MID.x, R2.floor + 1.62, R2.front - 0.1, scene, false)
+  for (const [x, t] of [[R2.l + 1.6, 'LF 330'], [PLATE_X, 'CF 400'], [R2.r - 1.6, 'RF 330']]) {
+    const m = add(new THREE.PlaneGeometry(1.4, 0.26), labelMat(t, { color: '#f0f4ff', w: 512, h: 96 }), x, R2.floor + 1.05, R2.front - 0.19, scene, false)
+    m.rotation.y = Math.PI
+    m.material.emissiveIntensity = 0.5
+  }
+  add(new THREE.PlaneGeometry(4.2, 3.4), std('#0a120d', 1, 0), PLATE_X, R2.floor + 3.4, R2.front - 0.01, scene, false).rotation.y = Math.PI
+  // field markings: dirt infield arc, base paths, bases, foul lines, batter's boxes
+  const field = canvasTex(1024, 1024, drawField)
+  const fieldM = add(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ map: field, transparent: true, roughness: 0.95, depthWrite: false }), PLATE_X, R2.floor + 0.004, PLATE_Z + 6, scene, false)
+  fieldM.rotation.x = -Math.PI / 2
+  fieldM.renderOrder = 1
+  // stadium-style lighting: rows of fixtures over the field and one over the half court
+  const lamps2 = []
+  const fixtureMat = std('#202030', 0.4, 0, { emissive: new THREE.Color('#f4f6ff'), emissiveIntensity: 2.4 })
+  for (const [x, z, power, dist] of [[PLATE_X, PLATE_Z + 1.5, 60, 14], [PLATE_X, PLATE_Z + 9, 70, 16], [PLATE_X, PLATE_Z + 16, 60, 14], [HOOP_X, R2.back + 2.6, 40, 10]]) {
+    add(new THREE.BoxGeometry(1.6, 0.06, 0.5), fixtureMat, x, R2.ceil - 0.04, z, scene, false)
+    const l = new THREE.PointLight('#eef2ff', power, dist, 1.4)
+    l.position.set(x, R2.ceil - 0.5, z)
+    scene.add(l)
+    lamps2.push([l, power])
+  }
+  const hemi2 = new THREE.PointLight('#9fb4ff', 14, 30, 1)
+  hemi2.position.set(R2_MID.x, R2.ceil - 1, R2_MID.z)
+  scene.add(hemi2)
 
   // desk
-  add(rbox(4.8, 0.08, 2.1, 0.02), deskMat, 0.25, -0.04, 0.3)
+  blockers.push(add(rbox(4.8, 0.08, 2.1, 0.02), deskMat, 0.25, -0.04, 0.3))
   for (const [x, z] of [[-2.0, -0.6], [2.5, -0.6], [-2.0, 1.2], [2.5, 1.2]]) add(new THREE.BoxGeometry(0.07, 1.1, 0.07), deskMat, x, -0.63, z)
   add(rbox(1.9, 0.006, 0.7, 0.003), std('#0b0b18', 0.95, 0), -0.05, 0.003, 0.95, scene, false)
 
@@ -346,13 +427,16 @@ async function init() {
     teamMark(iuShapes(), -1.05, '#990000', '#e0303a', 0.95, TEAM_SVG.iu),
   ]
 
-  // light switch (back wall, left of the shelf)
-  const sw = group(-3.0, 1.3, ROOM.back + 0.008)
+  // light switch: on the front wall right beside the door (latch side), at switch height, with a
+  // glowing surround and a label so it reads from across the room. Up = bright room lights.
+  const sw = group(...onWall('front', DOOR_X - 0.78 - 0.42, 1.0), FACE.front)
   sw.userData.kind = 'switch'
-  add(rbox(0.1, 0.15, 0.014, 0.008), trim, 0, 0, 0, sw, false)
-  const rocker = add(rbox(0.036, 0.07, 0.02, 0.006), std('#c0c8e0', 0.4, 0.1), 0, 0, 0.012, sw, false)
-  const locator = std('#020', 0.4, 0, { emissive: new THREE.Color('#00ff88'), emissiveIntensity: 0 })
-  add(new THREE.BoxGeometry(0.008, 0.008, 0.004), locator, 0, -0.055, 0.009, sw, false)
+  sw.translateZ(0.01)
+  const locator = std('#120c02', 0.4, 0, { emissive: new THREE.Color('#ffb547'), emissiveIntensity: 1 })
+  add(rbox(0.22, 0.32, 0.01, 0.012), locator, 0, 0, 0, sw, false)
+  add(rbox(0.17, 0.27, 0.018, 0.01), std('#d8dce8', 0.45, 0.05), 0, 0, 0.008, sw, false)
+  const rocker = add(rbox(0.065, 0.12, 0.03, 0.01), std('#eef1f8', 0.35, 0.05), 0, 0, 0.022, sw, false)
+  add(new THREE.PlaneGeometry(0.3, 0.0375), labelMat('LIGHTS', { color: '#ffb547', w: 512, h: 64 }), 0, -0.22, 0.004, sw, false).material.emissiveIntensity = 0.8
 
   // ---------- right wall: skate decks, cap ----------
   skateDeck(0.05, 1.65, 0.1, canvasTex(256, 1024, drawDeckA))
@@ -364,14 +448,14 @@ async function init() {
   const brim = add(new THREE.CylinderGeometry(0.13, 0.13, 0.01, 24, 1, false, -Math.PI / 2, Math.PI), std(P.crimson, 0.8, 0), 0, 0.0, 0.2, capG)
   brim.rotation.x = -0.15
 
-  // ---------- front wall: mini hoop + ball ----------
-  const hoop = group(...onWall('front', HOOP_X, 1.95), FACE.front)
+  // ---------- second room, back wall (behind home plate): mini hoop + ball ----------
+  const hoop = group(HOOP_X, 1.95, R2.back, FACE.back)
   add(rbox(0.9, 0.6, 0.03, 0.01), std('#1f1f38', 0.5, 0.1, { map: canvasTex(450, 300, drawBackboard) }), 0, 0, 0.05, hoop)
   add(new THREE.BoxGeometry(0.04, 0.04, 0.2), trim, 0, -0.22, 0.13, hoop)
   const rimMat = std('#c4622d', 0.5, 0.4, { emissive: new THREE.Color('#ff7a2e'), emissiveIntensity: 0 })
   add(new THREE.TorusGeometry(RIM_R, 0.011, 10, 48), rimMat, 0, -0.24, 0.36, hoop).rotation.x = Math.PI / 2
   const net = add(new THREE.CylinderGeometry(RIM_R, 0.12, 0.28, 14, 3, true), new THREE.MeshBasicMaterial({ color: '#c0c8e0', wireframe: true, transparent: true, opacity: 0.35 }), 0, -0.38, 0.36, hoop, false)
-  const RIM = new THREE.Vector3(HOOP_X, 1.95 - 0.24, ROOM.front - 0.36)
+  const RIM = new THREE.Vector3(HOOP_X, 1.95 - 0.24, R2.back + 0.36)
 
   // seven-segment score ticker above the backboard (counts makes since the page loaded)
   const tickC = document.createElement('canvas')
@@ -407,14 +491,14 @@ async function init() {
     tickTex.needsUpdate = true
   }
   drawTicker(0)
-  const ticker = group(...onWall('front', HOOP_X, 2.6), FACE.front)
+  const ticker = group(HOOP_X, 2.6, R2.back, FACE.back)
   add(rbox(0.7, 0.29, 0.07, 0.014), frameMat, 0, 0, 0.035, ticker)
   const tickMat = new THREE.MeshBasicMaterial({ map: tickTex, toneMapped: false })
   add(new THREE.PlaneGeometry(0.64, 0.233), tickMat, 0, 0, 0.0705, ticker, false)
   let tickBlink = 0
 
   // the ball: click to pick up, R (or tap) to shoot
-  const ball = add(new THREE.SphereGeometry(BALL_R, 32, 20), std('#b85a26', 0.75, 0, { map: basketballTexture() }), HOOP_X - 0.35, ROOM.floor + BALL_R, ROOM.front - 1.0)
+  const ball = add(new THREE.SphereGeometry(BALL_R, 32, 20), std('#b85a26', 0.75, 0, { map: basketballTexture() }), HOOP_X + 0.35, R2.floor + BALL_R, R2.back + 1.0)
   ball.userData.kind = 'ball'
   const bv = new THREE.Vector3() // velocity
   let held = false, shot = null, makes = 0, shots = 0, swish = 0
@@ -435,10 +519,12 @@ async function init() {
   flash.position.copy(RIM)
   scene.add(flash)
   let flashT = 9
-  function burst() {
+  // origin: the rim by default, or the pitching machine after a home run
+  function burst(origin = RIM, big = false) {
+    flash.position.copy(origin)
     for (const q of bits) {
-      const a = Math.random() * Math.PI * 2, s = 0.5 + Math.random() * 1.7
-      q.p.copy(RIM).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, -0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.2))
+      const a = Math.random() * Math.PI * 2, s = (0.5 + Math.random() * 1.7) * (big ? 1.35 : 1)
+      q.p.copy(origin).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, -0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.2))
       q.v.set(Math.cos(a) * s, 2 + Math.random() * 2.8, Math.sin(a) * s - 1.1) // fan out toward the room
       q.r.set(Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3)
       q.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(16)
@@ -446,12 +532,124 @@ async function init() {
     }
     confetti.visible = true
     flashT = 0
-    swish = 1
+    if (origin === RIM) swish = 1
   }
 
+  // ---------- home run derby (second room): plate by the doorway, machine out on the mound ----------
+  const MOUND_H = 0.22
+  const PLATE = new THREE.Vector3(PLATE_X, R2.floor, PLATE_Z)
+  const MACHINE = new THREE.Vector3(PLATE_X, R2.floor + MOUND_H, PLATE_Z + MOUND_DIST)
+  const RELEASE = new THREE.Vector3(PLATE_X, MACHINE.y + 1.52, MACHINE.z - 0.5) // where pitches leave the chute
+  const ZONE = { x: PLATE.x, y0: R2.floor + 0.85, y1: R2.floor + 1.95, hw: 0.4, z: PLATE.z }
+  const derbyKit = new THREE.Group() // machine, scoreboard and plate: any of them starts a round
+  derbyKit.userData.kind = 'derby'
+  scene.add(derbyKit)
+  // pitcher's mound
+  add(new THREE.CylinderGeometry(0.95, 1.45, MOUND_H, 40), std('#6b4a32', 0.95, 0), PLATE_X, R2.floor + MOUND_H / 2, MACHINE.z, scene, false)
+  add(new THREE.BoxGeometry(0.5, 0.02, 0.1), std('#f0f0f0', 0.6, 0), PLATE_X, R2.floor + MOUND_H + 0.01, MACHINE.z - 0.55, scene, false)
+  // pitching machine: tripod, motor housing, twin throwing wheels, ball hopper, status lamp
+  const mach = group(MACHINE.x, MACHINE.y, MACHINE.z, Math.PI, derbyKit)
+  const machDark = std('#15151f', 0.55, 0.45), machBody = std('#20325e', 0.45, 0.35)
+  for (const a of [0, 2.094, 4.189]) {
+    const leg = add(new THREE.CylinderGeometry(0.022, 0.026, 1.25, 10), machDark, Math.sin(a) * 0.26, 0.6, Math.cos(a) * 0.26, mach)
+    leg.rotation.set(Math.cos(a) * 0.22, 0, -Math.sin(a) * 0.22)
+  }
+  add(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 14), machDark, 0, 1.25, 0, mach)
+  add(rbox(0.5, 0.36, 0.62, 0.05), machBody, 0, 1.52, 0.02, mach)
+  const wheels = []
+  for (const sx of [-1, 1]) {
+    const w = add(new THREE.CylinderGeometry(0.17, 0.17, 0.07, 32), std('#0b0b12', 0.8, 0.1), sx * 0.2, 1.52, 0.32, mach)
+    w.rotation.z = Math.PI / 2
+    add(new THREE.TorusGeometry(0.17, 0.012, 8, 32), trim, 0, 0, 0, w).rotation.x = Math.PI / 2
+    wheels.push(w)
+  }
+  add(new THREE.CylinderGeometry(0.06, 0.07, 0.22, 16, 1, true), std('#2a2a50', 0.4, 0.6, { side: THREE.DoubleSide }), 0, 1.52, 0.4, mach).rotation.x = Math.PI / 2
+  add(new THREE.CylinderGeometry(0.22, 0.1, 0.3, 24, 1, true), std('#26263f', 0.6, 0.3, { side: THREE.DoubleSide }), 0, 1.92, -0.12, mach)
+  const hopperBall = std('#e9e6df', 0.7, 0, { map: seamTexture() })
+  for (let i = 0; i < 7; i++) add(new THREE.SphereGeometry(0.065, 14, 10), hopperBall, Math.cos(i * 0.9) * 0.1 * (i % 3), 1.97 + (i % 2) * 0.05, -0.12 + Math.sin(i * 0.9) * 0.1 * (i % 3), mach)
+  const lampMat = std('#080808', 0.3, 0, { emissive: new THREE.Color('#00ff88'), emissiveIntensity: 0.4 })
+  add(new THREE.SphereGeometry(0.045, 16, 12), lampMat, 0.16, 1.74, 0.2, mach, false)
+  // derby board on the wall above the machine (also the entry sign)
+  const derbyC = document.createElement('canvas')
+  derbyC.width = 640; derbyC.height = 300
+  const derbyTex = new THREE.CanvasTexture(derbyC)
+  derbyTex.colorSpace = THREE.SRGBColorSpace
+  let derbyBest = 0
+  try { derbyBest = +localStorage.getItem('wos_derby_best') || 0 } catch { /* storage blocked */ }
+  function drawDerbyBoard(line2 = '', line3 = '') {
+    const g = derbyC.getContext('2d'), W = derbyC.width, H = derbyC.height
+    g.fillStyle = '#07060a'; g.fillRect(0, 0, W, H)
+    g.strokeStyle = 'rgba(255,181,71,0.5)'; g.lineWidth = 4; g.strokeRect(10, 10, W - 20, H - 20)
+    g.textAlign = 'center'
+    g.save(); g.shadowColor = '#ff8a1f'; g.shadowBlur = 18; g.fillStyle = '#ffb547'
+    g.font = '800 58px "JetBrains Mono", monospace'
+    g.fillText('HOME RUN', W / 2, 92); g.fillText('DERBY', W / 2, 152)
+    g.restore()
+    g.fillStyle = 'rgba(240,244,255,0.85)'; g.font = '600 26px "JetBrains Mono", monospace'
+    g.fillText(line2 || 'CLICK TO PLAY · 5 SWINGS', W / 2, 212)
+    g.fillStyle = 'rgba(255,181,71,0.75)'; g.font = '600 24px "JetBrains Mono", monospace'
+    g.fillText(line3 || (derbyBest ? `BEST  ${derbyBest} FT` : 'PITCHES · FB · CB · CH'), W / 2, 256)
+    derbyTex.needsUpdate = true
+  }
+  drawDerbyBoard()
+  // scoreboard high on the outfield wall, over the batter's eye
+  const board = group(PLATE_X, R2.floor + 5.85, R2.front, FACE.front, derbyKit)
+  board.scale.setScalar(2.4)
+  add(rbox(1.24, 0.6, 0.06, 0.014), frameMat, 0, 0, 0.03, board)
+  add(new THREE.PlaneGeometry(1.16, 0.544), new THREE.MeshBasicMaterial({ map: derbyTex, toneMapped: false }), 0, 0, 0.0615, board, false)
+  // home plate + batter's boxes on the floor
+  const plateShape = new THREE.Shape([[-0.21, 0], [0.21, 0], [0.21, 0.21], [0, 0.42], [-0.21, 0.21]].map(([x, y]) => new THREE.Vector2(x, y)))
+  const plate = add(new THREE.ShapeGeometry(plateShape), std('#e8e8ee', 0.7, 0, { emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.25 }), PLATE.x, R2.floor + 0.008, PLATE.z + 0.21, derbyKit, false)
+  plate.rotation.x = -Math.PI / 2
+  plate.renderOrder = 2
+  // glowing ring around the plate: the spot to stand on to bat
+  const plateGlow = add(new THREE.RingGeometry(1.05, 1.12, 64), new THREE.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }), PLATE.x, R2.floor + 0.01, PLATE.z, scene, false)
+  plateGlow.rotation.x = -Math.PI / 2
+  // strike zone outline + the aim ring (plate-coverage cursor), shown only while batting
+  const zoneLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(ZONE.x - ZONE.hw, ZONE.y0, ZONE.z), new THREE.Vector3(ZONE.x + ZONE.hw, ZONE.y0, ZONE.z),
+    new THREE.Vector3(ZONE.x + ZONE.hw, ZONE.y1, ZONE.z), new THREE.Vector3(ZONE.x - ZONE.hw, ZONE.y1, ZONE.z)]),
+  new THREE.LineBasicMaterial({ color: '#8CB4FF', transparent: true, opacity: 0, depthWrite: false }))
+  scene.add(zoneLine)
+  const aimRing = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.125, 40), new THREE.MeshBasicMaterial({ color: '#f0f4ff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }))
+  aimRing.add(new THREE.Mesh(new THREE.CircleGeometry(0.018, 16), aimRing.material))
+  scene.add(aimRing)
+  // the baseball in play, its colour-coded trail, and the bat
+  const pitchBall = add(new THREE.SphereGeometry(0.065, 24, 16), std('#e9e6df', 0.6, 0, { map: seamTexture() }), RELEASE.x, RELEASE.y, RELEASE.z)
+  pitchBall.visible = false
+  const TRAIL_N = 26
+  const trailGeo = new THREE.BufferGeometry()
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3))
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.75, toneMapped: false }))
+  trail.frustumCulled = false
+  trail.visible = false
+  scene.add(trail)
+  // read cues: a coloured seam ring that shows the spin axis, and (once the pitch is out) a faint
+  // outline of where it will cross the zone plus the rest of its path
+  const seamRing = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.006, 6, 40), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7, toneMapped: false }))
+  pitchBall.add(seamRing)
+  const destRing = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.088, 40), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }))
+  scene.add(destRing)
+  const PRED_N = 24
+  const predGeo = new THREE.BufferGeometry()
+  predGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PRED_N * 3), 3))
+  const predLine = new THREE.Line(predGeo, new THREE.LineDashedMaterial({ color: '#ffffff', dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0, toneMapped: false }))
+  predLine.frustumCulled = false
+  scene.add(predLine)
+  // draw the batting overlays after the floor decal so it never paints over them
+  for (const o of [zoneLine, aimRing, destRing, predLine, trail]) o.renderOrder = 3
+  const batPivot = group(PLATE.x + 0.62, R2.floor + 1.45, PLATE.z - 0.15)
+  const batArm = group(0, 0, 0, 0, batPivot)
+  const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.016, 1.45, 18), std('#c9a06a', 0.55, 0.05))
+  bat.rotation.z = -Math.PI / 2 // lie along +x (handle at the pivot, barrel out)
+  bat.position.x = 0.72
+  bat.castShadow = true
+  batArm.add(bat)
+  batPivot.visible = false
+
   // ---------- windows + the scenes outside ----------
-  windowFrame('left')
-  windowFrame('right')
+  // each window is a click target: a close-up framing that brings the scene outside to life
+  const windowGroups = [windowFrame('left', 'Nighthawks'), windowFrame('right', 'The Starry Night')]
   const outsideLeft = nighthawks()
   const sky = starryNight()
 
@@ -473,7 +671,7 @@ async function init() {
   fill.position.set(C.x, ROOM.ceil - 0.35, C.z)
   scene.add(fill)
   // second fixture over the front half of the room (hoop, team wall)
-  const FRONT_LIGHT = new THREE.Vector3(0.2, ROOM.ceil - 0.35, 5.7)
+  const FRONT_LIGHT = new THREE.Vector3(1.4, ROOM.ceil - 0.35, 6.6)
   add(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 48), ceilMat, FRONT_LIGHT.x, ROOM.ceil - 0.02, FRONT_LIGHT.z, scene, false)
   add(new THREE.CylinderGeometry(0.37, 0.37, 0.02, 48), trim, FRONT_LIGHT.x, ROOM.ceil - 0.005, FRONT_LIGHT.z, scene, false)
   const fill2 = new THREE.PointLight('#a9bbff', 20, 8, 1.6)
@@ -502,16 +700,29 @@ async function init() {
   screenObj.position.copy(SCREEN_POS)
   screenObj.scale.setScalar(SCREEN_W / SCREEN_PX.w)
   cssScene.add(screenObj)
+  // cut-out over the glass: writes see-through pixels (no blending) wherever the screen is visible.
+  // It is depth-tested like any mesh, so walls, the doorway or furniture in front still cover it.
+  const cutout = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_W, SCREEN_W * SCREEN_PX.h / SCREEN_PX.w),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, blending: THREE.NoBlending, toneMapped: false, fog: false }))
+  cutout.position.copy(SCREEN_POS)
+  scene.add(cutout)
   bootEl.classList.add('three-on')
+  bootEl.classList.remove('three-pending')
 
   // ---------- camera rig ----------
   // yaw/pitch: forward = -(sin yaw · cos pitch, sin pitch, cos yaw · cos pitch)
   const cur = { yaw: WALK.yaw0, pitch: WALK.pitch0 }
   const tgt = { ...cur }
-  const me = { p: WALK.home.clone(), v: new THREE.Vector3(), push: 0, bob: 0 }
+  // h/vy: height above standing eye level and vertical speed; jumpBuf: time left on a queued jump
+  const me = { p: WALK.home.clone(), v: new THREE.Vector3(), h: 0, vy: 0, grounded: true, jumpBuf: 0, land: 0 }
   const pressed = new Set()
   // floor-plan obstacles the walker slides around: boxes [x0, z0, x1, z1] and posts [x, z, r]
-  const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, ROOM.front - 0.62, HOOP_X + 0.5, ROOM.front]]
+  const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, R2.back, HOOP_X + 0.5, R2.back + 0.62],
+    [PLATE_X - 0.42, PLATE_Z + MOUND_DIST - 0.4, PLATE_X + 0.42, PLATE_Z + MOUND_DIST + 0.45]]
+  // walkable floor: the two rooms plus the doorway passage between them, each [x0, z0, x1, z1]
+  const AREAS = [[ROOM.l, ROOM.back, ROOM.r, ROOM.front], [R2.l, R2.back, R2.r, R2.front],
+    [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1]]
+  const inRoom2 = (p) => p.z > ROOM.front + WALL_T / 2
   const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42]]
   function collide(p) {
     const R = WALK.radius
@@ -529,8 +740,14 @@ async function init() {
       const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 1e-6
       if (d < r + R) { p.x = x + (dx / d) * (r + R); p.z = z + (dz / d) * (r + R) }
     }
-    p.x = THREE.MathUtils.clamp(p.x, ROOM.l + R, ROOM.r - R)
-    p.z = THREE.MathUtils.clamp(p.z, ROOM.back + R, ROOM.front - R)
+    // stay inside the nearest walkable area (rooms, or the doorway when passing through)
+    let bx = p.x, bz = p.z, best = Infinity
+    for (const [x0, z0, x1, z1] of AREAS) {
+      const cx = THREE.MathUtils.clamp(p.x, x0 + R, x1 - R), cz = THREE.MathUtils.clamp(p.z, z0 + R, z1 - R)
+      const d = (cx - p.x) ** 2 + (cz - p.z) ** 2
+      if (d < best) { best = d; bx = cx; bz = cz }
+    }
+    p.x = bx; p.z = bz
   }
 
   const zoomPos = new THREE.Vector3(SCREEN_POS.x, SCREEN_POS.y, 1.45) // end of the boot dolly (z set by resize)
@@ -538,7 +755,6 @@ async function init() {
     const w = stage.clientWidth || innerWidth, h = stage.clientHeight || innerHeight
     renderer.setSize(w, h)
     css.setSize(w, h)
-    composer?.setSize(w, h)
     camera.aspect = w / h
     // fixed, comfortable field of view for walking (no zoom); the boot dolly keeps the screen framing it had
     const tall = camera.aspect < 0.85
@@ -554,23 +770,36 @@ async function init() {
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector2()
   const pointers = new Map()
-  const pickables = [computer, sw, ball, ...posters]
+  const pickables = [computer, sw, ball, derbyKit, ...windowGroups, ...posters]
+  const rayTargets = [...pickables, ...blockers]
   let drag = null, hoverKind = null, hoverPoster = null
+  // lightsOn: the switch's "up" position = bright room lights; off is the dim base mood
   let on = false, booting = false, lightsOn = true
   let focusOn = false, focused = null, walked = false
   let msg = '', msgUntil = 0
   const say = (text, sec = 2.2) => { msg = text; msgUntil = clock.elapsedTime + sec }
   // the room only takes keys while it is on screen and the visitor hasn't booted yet
   const roomLive = () => !!raf && !booting && !on && !bootEl.classList.contains('hidden')
+  // boot guard: the click that captures the mouse (or first taps the page) never boots the computer
+  let aimSince = Infinity, touchedOnce = false, bootTapAt = -9
 
+  // interaction reach (room units, ≈ 3.8 m) and wall blocking: the ray tests interactive objects and
+  // solid surfaces together, and only the nearest hit counts, so nothing is clickable through a wall
+  const REACH = 6.5
+  let tooFar = null // last object the ray reached that was beyond REACH (for a "walk closer" hint)
+  const castRay = () => {
+    const hit = ray.intersectObjects(rayTargets, true)[0]
+    let o = hit?.object
+    while (o && !o.userData.kind) o = o.parent
+    o = o?.userData.kind ? o : null
+    tooFar = o && hit.distance > REACH ? o : null
+    return o && hit.distance <= REACH ? o : null
+  }
   const pick = (x, y) => {
     const r = stage.getBoundingClientRect()
     ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
     ray.setFromCamera(ndc, camera)
-    const hit = ray.intersectObjects(pickables, true)[0]
-    let o = hit?.object
-    while (o && !o.userData.kind) o = o.parent
-    return o || null
+    return castRay()
   }
   const setHover = (o) => {
     hoverKind = o?.userData.kind || null
@@ -593,42 +822,58 @@ async function init() {
   const aiming = () => locked() || freeLook
   const setAimUI = () => {
     const a = aiming()
+    if (a && aimSince === Infinity) aimSince = performance.now()
+    if (!a) aimSince = Infinity
     stage.classList.toggle('locked', a)
     crossEl.classList.toggle('show', a)
-    if (!a) { setHover(null); crossEl.classList.remove('hot'); if (focusOn) unfocus() }
+    if (!a) { setHover(null); crossEl.classList.remove('hot'); if (focusOn) unfocus(); if (charge) releaseShot() }
   }
   const unlockLook = () => { freeLook = false; if (locked()) document.exitPointerLock(); else setAimUI() }
   document.addEventListener('pointerlockchange', setAimUI)
   document.addEventListener('pointerlockerror', () => { if (roomLive()) { freeLook = true; setAimUI() } })
   const pickCenter = () => {
     ray.setFromCamera(ndc.set(0, 0), camera)
-    let o = ray.intersectObjects(pickables, true)[0]?.object
-    while (o && !o.userData.kind) o = o.parent
-    return o || null
+    return castRay()
   }
   const act = (o, touch) => {
     const kind = o?.userData.kind
-    if (held && touch && kind !== 'poster' && kind !== 'switch') return shoot()
     if (kind === 'poster' && !focusOn) { if (held) drop(); return focusPoster(o) }
-    if (kind === 'switch') { lightsOn = !lightsOn; return }
+    if (kind === 'switch') { lightsOn = !lightsOn; return say(lightsOn ? 'Lights up' : 'Lights down', 1.2) }
     if (focusOn) return unfocus()
     if (kind === 'ball' && !held) return grab()
-    if (kind === 'computer' && !on && typeof window.boot === 'function') { unlockLook(); window.boot() }
+    if (kind === 'derby') return enterDerby()
+    if (kind === 'window') { if (held) drop(); return focusPoster(o) }
+    if (!kind && onPlate()) return enterDerby() // standing on home plate: click to bat
+    if (!kind && tooFar && !focusOn) return say('Walk closer', 1.4)
+    if (kind === 'computer' && !on && typeof window.boot === 'function') {
+      // never boot on the click that captured the mouse, a double-click, or a first stray tap
+      if (aiming() && performance.now() - aimSince < 450) return
+      if (touch && clock.elapsedTime - bootTapAt > 3) { bootTapAt = clock.elapsedTime; return say('Tap the computer again to start', 3) }
+      unlockLook()
+      window.boot()
+    }
   }
 
   stage.addEventListener('pointerdown', (e) => {
     if (booting) return
+    if (derby) { if (e.button === 0 || e.pointerType !== 'mouse') derbyPointer(e, true); return }
     if (e.pointerType === 'mouse' && LOCKABLE) {
       if (e.button !== 0) return
-      if (aiming()) return act(pickCenter(), false)
+      if (aiming()) {
+        if (held) { const o = pickCenter(); return o?.userData.kind === 'switch' ? act(o, false) : startCharge() }
+        return act(pickCenter(), false)
+      }
       if (focusOn) return act(pick(e.clientX, e.clientY), false) // cursor is free while reading a poster
       return lockLook() // first click only captures the mouse
     }
+    if (!touchedOnce && e.pointerType === 'mouse') { touchedOnce = true; return } // first click just focuses the room
+    if (held && pointers.size === 0) startCharge() // touch: press and hold anywhere to charge the shot
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     stage.setPointerCapture(e.pointerId)
     drag = pointers.size === 1 ? { x: e.clientX, y: e.clientY, yaw: tgt.yaw, pitch: tgt.pitch, moved: false } : null
   })
   stage.addEventListener('pointermove', (e) => {
+    if (derby) return derbyPointer(e, false)
     if (aiming() && e.pointerType === 'mouse') {
       if (focusOn || booting) return
       // clamp spikes some browsers report when the pointer is captured
@@ -651,15 +896,21 @@ async function init() {
     if (!LOCKABLE) setHover(booting ? null : pick(e.clientX, e.clientY))
   })
   const release = (e) => {
+    if (charge && charge.src === 'pointer' && (e.pointerType !== 'mouse' || e.button === 0)) {
+      releaseShot()
+      if (!pointers.has(e.pointerId)) return
+      pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging')
+      return
+    }
     if (!pointers.has(e.pointerId)) return
     const wasClick = drag && !drag.moved && pointers.size === 1
     pointers.delete(e.pointerId)
     drag = null
     stage.classList.remove('dragging')
-    if (wasClick && !booting) act(pick(e.clientX, e.clientY), e.pointerType !== 'mouse')
+    if (wasClick && !booting && !derby) act(pick(e.clientX, e.clientY), e.pointerType !== 'mouse')
   }
   stage.addEventListener('pointerup', release)
-  stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging') })
+  stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging'); if (charge) releaseShot() })
   stage.addEventListener('pointerleave', () => { if (!drag && !aiming()) setHover(null) })
   // the view's zoom is fixed: the wheel does nothing in the room
   stage.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
@@ -668,33 +919,67 @@ async function init() {
   // keyboard walking (layout-independent codes) + R to shoot
   const MOVE = { KeyW: 'KeyW', ArrowUp: 'KeyW', KeyS: 'KeyS', ArrowDown: 'KeyS', KeyA: 'KeyA', ArrowLeft: 'KeyA', KeyD: 'KeyD', ArrowRight: 'KeyD' }
   addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && derby) { e.preventDefault(); return exitDerby() }
     if (e.key === 'Escape' && freeLook) return unlockLook()
     if (e.key === 'Escape' && focusOn) return unfocus()
     if (!roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
     if (e.target instanceof Element && e.target.closest('input,textarea,select,[contenteditable]')) return
+    if (derby) { if (e.code === 'Space' && !(e.target instanceof Element && e.target.closest('button'))) e.preventDefault(); return } // batting: mouse only
     if (MOVE[e.code]) {
       e.preventDefault()
       pressed.add(MOVE[e.code])
       if (focusOn) unfocus()
     } else if (e.key === 'Shift') pressed.add('run')
-    else if (e.code === 'KeyR' && !e.repeat) { e.preventDefault(); if (held) shoot(); else say(ballNear() ? 'Click the ball to pick it up' : 'Find the ball by the hoop') }
+    else if (e.code === 'Space') {
+      // jump (never a boot key); holding Space keeps hopping on each landing
+      e.preventDefault()
+      if (focusOn) unfocus()
+      if (!pressed.has('jump')) me.jumpBuf = MOVE_PHYS.buffer
+      pressed.add('jump')
+    } else if (e.code === 'KeyR' && !e.repeat) {
+      e.preventDefault()
+      if (held) startCharge('key')
+      else say(ballNear() ? 'Click the ball to pick it up' : 'Find the ball by the hoop')
+    }
   })
-  addEventListener('keyup', (e) => { if (MOVE[e.code]) pressed.delete(MOVE[e.code]); if (e.key === 'Shift') pressed.delete('run') })
-  addEventListener('blur', () => pressed.clear())
+  addEventListener('keyup', (e) => {
+    if (MOVE[e.code]) pressed.delete(MOVE[e.code])
+    if (e.key === 'Shift') pressed.delete('run')
+    if (e.code === 'Space') pressed.delete('jump')
+    if (e.code === 'KeyR' && charge?.src === 'key') releaseShot()
+  })
+  // leaving the page or the tab: drop every held key/charge so nothing sticks on return
+  const resetInput = () => {
+    pressed.clear()
+    me.jumpBuf = 0
+    if (charge) { charge = null; meterEl.classList.remove('show') }
+  }
+  addEventListener('blur', resetInput)
+  document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput() })
+  addEventListener('pagehide', () => {
+    resetInput()
+    if (derby) exitDerby(true)
+    unlockLook()
+    me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
+    cancelAnimationFrame(raf)
+    raf = 0
+  })
+  addEventListener('pageshow', (e) => { if (e.persisted && !raf && !bootEl.classList.contains('hidden')) { clock.getDelta(); frame() } })
 
   // touch pad: hold an arrow to walk; Shoot appears while holding the ball
   padEl.addEventListener('pointerdown', (e) => {
     const k = e.target.closest('button')?.dataset.k
     if (!k) return
     e.preventDefault()
-    if (k === 'shoot') return shoot()
-    pressed.add(k)
     e.target.setPointerCapture?.(e.pointerId)
+    if (k === 'shoot') return startCharge('pad')
+    pressed.add(k)
     if (focusOn) unfocus()
   })
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) padEl.addEventListener(ev, (e) => {
     const k = e.target.closest?.('button')?.dataset.k
-    if (k && k !== 'shoot') pressed.delete(k)
+    if (k === 'shoot') { if (charge?.src === 'pad') releaseShot() }
+    else if (k) pressed.delete(k)
   })
   padEl.addEventListener('contextmenu', (e) => e.preventDefault())
 
@@ -705,15 +990,52 @@ async function init() {
     held = true
     shot = null
     bv.set(0, 0, 0)
-    say(COARSE ? 'Tap anywhere to shoot' : 'Aim at the hoop · press R to shoot', 2.6)
+    say(COARSE ? 'Hold anywhere, release in the green' : 'Aim at the hoop · hold R or click, release in the green', 2.6)
   }
   function drop() {
     held = false
     bv.set(0, -0.5, 0)
     shot = null
+    if (charge) { charge = null; meterEl.classList.remove('show') }
   }
+
+  // ---------- shot meter: hold to charge, release inside the green window ----------
+  const METER = { fill: 0.95, green: 0.8, late: 0.25 } // seconds to fill, green centre (0–1), grace after full
+  let charge = null, meterFlash = 0
+  const greenWidth = () => THREE.MathUtils.clamp(0.075 - Math.hypot(RIM.x - me.p.x, RIM.z - me.p.z) * 0.006, 0.03, 0.07)
+  function startCharge(src = 'pointer') {
+    if (!held || charge) return
+    const gw = greenWidth()
+    charge = { t0: performance.now(), src, gw, f: 0 }
+    meterG.style.bottom = `${(METER.green - gw) * 100}%`
+    meterG.style.height = `${gw * 200}%`
+    meterF.style.height = '0'
+    meterEl.classList.remove('green', 'ok', 'miss')
+    meterEl.classList.add('show')
+    meterFlash = 0
+  }
+  function updateCharge() {
+    if (!charge) return
+    const k = (performance.now() - charge.t0) / 1000 / METER.fill
+    charge.f = Math.min(1, k)
+    meterF.style.height = `calc((100% - 6px) * ${charge.f.toFixed(3)})`
+    if (k > 1 + METER.late / METER.fill) releaseShot() // held too long: it goes up late
+  }
+  function releaseShot() {
+    if (!charge) return
+    const { f, gw } = charge
+    charge = null
+    if (!held) { meterEl.classList.remove('show'); return }
+    const err = f - METER.green
+    const grade = Math.abs(err) <= gw ? 'green' : Math.abs(err) <= gw * 2.4 ? 'ok' : 'miss'
+    meterEl.classList.add(grade)
+    meterFlash = 0.75
+    shoot(err, grade)
+  }
+
   const fwd3 = new THREE.Vector3(), toRim = new THREE.Vector3()
-  function shoot() {
+  // err: release minus the green centre (negative = early); grade: green | ok | miss
+  function shoot(err = 0, grade = 'ok') {
     if (!held) return
     held = false
     shots++
@@ -721,18 +1043,23 @@ async function init() {
     toRim.copy(RIM).sub(ball.position)
     const dh = Math.hypot(toRim.x, toRim.z)
     const aim = dh > 1e-3 ? (fwd3.x * toRim.x + fwd3.z * toRim.z) / (Math.hypot(fwd3.x, fwd3.z) * dh || 1) : 0
-    if (aim > 0.92 && dh > 0.5 && dh < 9.5) {
-      // aimed at the hoop: a proper arc, with error that grows with distance and sloppy aim
-      const off = 0.035 + dh * 0.014 + (1 - aim) * 1.6
-      const tx = RIM.x + (Math.random() * 2 - 1) * off, tz = RIM.z + (Math.random() * 2 - 1) * off
+    if (aim > 0.92 && dh > 0.5 && dh < 11) {
+      // aimed at the hoop: a proper arc. A green release flies true on a soft, high arc; otherwise
+      // early releases fall short, late ones carry long, and scatter grows with distance and aim
+      const green = grade === 'green'
+      const lat = green ? 0.01 + (1 - aim) * 0.45 : 0.03 + Math.abs(err) * 0.7 + dh * 0.008 + (1 - aim) * 1.6
+      const along = green ? 0 : err * (1.1 + dh * 0.12)
+      const ux = toRim.x / dh, uz = toRim.z / dh, side = (Math.random() * 2 - 1) * lat
+      const tx = RIM.x + ux * along - uz * side, tz = RIM.z + uz * along + ux * side
       const dy = RIM.y - ball.position.y
-      let T = 0.55 + dh * 0.11
+      let T = (0.55 + dh * 0.11) * (green ? 1.05 : 1 + err * 0.5)
+      say(green ? 'Green release!' : `${grade === 'ok' ? 'Slightly' : 'Very'} ${err < 0 ? 'early' : 'late'}`, 1.3)
       let vy = (dy + 0.5 * GRAV * T * T) / T
-      const vyMax = Math.sqrt(2 * GRAV * Math.max(0.3, ROOM.ceil - 0.3 - ball.position.y)) // stay under the ceiling
+      const vyMax = Math.sqrt(2 * GRAV * Math.max(0.3, R2.ceil - 0.3 - ball.position.y)) // stay under the ceiling
       if (vy > vyMax) { vy = vyMax; T = (vy + Math.sqrt(Math.max(0, vy * vy - 2 * GRAV * dy))) / GRAV }
       bv.set((tx - ball.position.x) / T, vy, (tz - ball.position.z) / T)
     } else {
-      bv.copy(fwd3).multiplyScalar(5.4)
+      bv.copy(fwd3).multiplyScalar(2.6 + 3.6 * THREE.MathUtils.clamp(METER.green + err, 0.2, 1))
       bv.y += 1.8
     }
     shot = { scored: false, t: 0 }
@@ -747,7 +1074,8 @@ async function init() {
     const n = new THREE.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new THREE.Quaternion()))
     const p = g.getWorldPosition(new THREE.Vector3())
     const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
-    const d = Math.max((h * 0.62) / tanV, (w * 0.62) / (tanV * camera.aspect))
+    const k = g.userData.zoom ?? 0.62
+    const d = Math.max((h * k) / tanV, (w * k) / (tanV * camera.aspect))
     focusLookTgt.copy(p)
     focusPosTgt.copy(p).addScaledVector(n, d)
     if (!focusOn) { focusPos.copy(focusPosTgt); focusLook.copy(focusLookTgt) }
@@ -762,6 +1090,257 @@ async function init() {
     backEl.classList.remove('show')
   }
 
+  // ---------- home run derby ----------
+  // brk: total break at the plate in world units [x, y] (+x is the batter's side); spin: world axis; rps: spin rate
+  const PITCHES = {
+    FB: { name: 'Fastball', mph: [93, 98], time: 0.6, brk: [0.04, -0.05], spin: [1, 0, 0], rps: 36, col: '#f0f4ff' },
+    CB: { name: 'Curveball', mph: [76, 81], time: 0.84, brk: [-0.32, -0.6], spin: [-1, 0.25, 0.35], rps: 28, col: '#ffb547' },
+    CH: { name: 'Changeup', mph: [82, 87], time: 0.74, brk: [0.2, -0.3], spin: [0.7, 0, -0.55], rps: 12, col: '#00ff88' },
+  }
+  const SWINGS = 5, LAG = 0.11 // swing → bat reaches the zone
+  // batting view: standing in at the plate, just behind and above the hitter's shoulder
+  const DCAM = new THREE.Vector3(PLATE.x + 0.3, R2.floor + 2.25, PLATE.z - 2.8)
+  const DLOOK = new THREE.Vector3(PLATE.x, R2.floor + 1.35, PLATE.z + 6)
+  const onPlate = () => inRoom2(me.p) && Math.hypot(me.p.x - PLATE.x, me.p.z - PLATE.z) < 1.15
+  const aimPt = new THREE.Vector3(ZONE.x, (ZONE.y0 + ZONE.y1) / 2, ZONE.z)
+  const hitV = new THREE.Vector3(), spinAxis = new THREE.Vector3(), pv = new THREE.Vector3()
+  const trailPts = []
+  let derby = null, derbyAmt = 0
+  const nowS = () => performance.now() / 1000
+  const rand = (a, b) => a + Math.random() * (b - a)
+
+  function updateDerbyHud() {
+    if (!derby) return
+    const n = Math.min(derby.swings.length + 1, SWINGS), hrs = derby.swings.filter((s) => s.hr).length
+    const p = derby.pitch && derby.phase !== 'windup' ? `<span class="pt">${PITCHES[derby.pitch.type].name} · ${derby.pitch.mph} mph</span>` : ''
+    derbyHud.innerHTML = `<span><b>Home Run Derby</b></span><span>Swing <b>${n}/${SWINGS}</b></span><span>HR <b>${hrs}</b></span>${p}`
+  }
+  function enterDerby() {
+    if (derby || booting || on) return
+    if (held) drop()
+    unfocus()
+    unlockLook()
+    resetInput()
+    // stand the walker in the box so leaving the derby is seamless
+    me.p.set(PLATE.x + 0.9, WALK.eye, PLATE.z - 0.6)
+    me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
+    const turns = Math.round((cur.yaw - Math.PI) / (Math.PI * 2))
+    tgt.yaw = Math.PI + turns * Math.PI * 2
+    tgt.pitch = -0.05
+    derby = { phase: 'ready', until: nowS() + 1.3, swings: [], pitch: null, swing: null, ball: null }
+    stage.classList.add('derby')
+    derbySum.classList.remove('show')
+    derbyHud.classList.add('show')
+    derbyExit.classList.add('show')
+    batPivot.visible = true
+    updateDerbyHud()
+    drawDerbyBoard(`SWING 1 OF ${SWINGS}`, derbyBest ? `BEST  ${derbyBest} FT` : ' ')
+    say(COARSE ? 'Tap where the ball will cross to swing' : 'Move to aim · click to swing as the ball reaches the zone', 3.2)
+  }
+  function exitDerby(silent = false) {
+    if (!derby) return
+    derby = null
+    stage.classList.remove('derby')
+    for (const el of [derbySum, derbyHud, derbyExit]) el.classList.remove('show')
+    pitchBall.visible = trail.visible = batPivot.visible = destRing.visible = predLine.visible = false
+    lampMat.emissive.set('#00ff88')
+    drawDerbyBoard()
+    if (!silent) say(LOCKABLE ? 'Click to look around' : 'Back in the room', 2)
+  }
+  derbyExit.addEventListener('click', () => exitDerby())
+  derbySum.addEventListener('click', (e) => {
+    const a = e.target.closest('button')?.dataset.a
+    if (a === 'again') { exitDerby(true); enterDerby() }
+    else if (a === 'exit') exitDerby()
+  })
+
+  // mouse/touch over the room while batting: the aim ring follows; a press swings
+  function derbyPointer(e, down) {
+    if (!derby || derby.phase === 'summary') return
+    const r = stage.getBoundingClientRect()
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+    ray.setFromCamera(ndc, camera)
+    const { origin: o, direction: d } = ray.ray
+    if (Math.abs(d.z) > 1e-4) {
+      const k = (ZONE.z - o.z) / d.z
+      if (k > 0) aimPt.set(
+        THREE.MathUtils.clamp(o.x + d.x * k, ZONE.x - ZONE.hw - 0.35, ZONE.x + ZONE.hw + 0.35),
+        THREE.MathUtils.clamp(o.y + d.y * k, ZONE.y0 - 0.35, ZONE.y1 + 0.35), ZONE.z)
+    }
+    if (down) swing()
+  }
+  function swing() {
+    if (derby.swing) return
+    if (derby.phase !== 'pitch') return say(derby.phase === 'result' ? 'Next pitch coming' : 'Wait for the pitch', 1.1)
+    const t = nowS()
+    derby.swing = { t0: t, contactAt: t + LAG, done: false }
+    batPivot.position.y = THREE.MathUtils.clamp(aimPt.y + 0.05, ZONE.y0, ZONE.y1 + 0.1) // swing plane follows the aim
+  }
+  function startPitch() {
+    const r = Math.random()
+    const type = r < 0.45 ? 'FB' : r < 0.75 ? 'CB' : 'CH'
+    const P_ = PITCHES[type]
+    const T = new THREE.Vector3(ZONE.x + rand(-0.85, 0.85) * ZONE.hw, rand(ZONE.y0 + 0.12, ZONE.y1 - 0.12), ZONE.z)
+    derby.pitch = { type, T, B: new THREE.Vector3(P_.brk[0], P_.brk[1], 0), t0: nowS(), dur: P_.time * rand(0.96, 1.04), mph: Math.round(rand(...P_.mph)) }
+    spinAxis.set(...P_.spin).normalize()
+    pitchBall.quaternion.identity()
+    seamRing.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), spinAxis)
+    seamRing.material.color.set(P_.col)
+    seamRing.visible = true
+    destRing.material.color.set(P_.col)
+    predLine.material.color.set(P_.col)
+    trail.material.color.set(P_.col)
+    lampMat.emissive.set(P_.col)
+    pitchBall.position.copy(RELEASE)
+    pitchBall.visible = trail.visible = true
+    trailPts.length = 0
+    derby.ball = null
+    derby.phase = 'pitch'
+    updateDerbyHud()
+  }
+  // position of the pitch at u (0 = release, 1 = front of the plate): aimed off target by the break,
+  // then bent back onto it, so the break shows up late like a real one
+  function pitchAt(p, u, out) {
+    out.copy(p.T).sub(p.B).sub(RELEASE).multiplyScalar(u).add(RELEASE).addScaledVector(p.B, u * u)
+    if (u > 1) { // past the plate: carry on along the final direction
+      pv.copy(p.T).add(p.B).sub(RELEASE).multiplyScalar(u - 1)
+      out.copy(p.T).add(pv)
+    }
+    return out
+  }
+  function record(res) {
+    derby.swings.push(res)
+    derby.phase = 'result'
+    derby.until = nowS() + (res.hr ? 2.8 : 2.0)
+    updateDerbyHud()
+    drawDerbyBoard(res.hr ? 'HOME RUN!' : res.label.toUpperCase(), `SWING ${derby.swings.length} OF ${SWINGS}`)
+  }
+  function resolveSwing() {
+    const p = derby.pitch, s = derby.swing
+    s.done = true
+    const name = PITCHES[p.type].name
+    const te = s.contactAt - (p.t0 + p.dur) // + late, − early
+    const dist = Math.hypot(aimPt.x - p.T.x, aimPt.y - p.T.y)
+    if (Math.abs(te) > 0.13 || dist > 0.25) {
+      say(`Swing and a miss · ${Math.abs(te) > 0.13 ? (te < 0 ? 'way early' : 'way late') : 'missed the ball'}`, 1.8)
+      return record({ pitch: name, label: 'Miss', ft: 0, hr: false, fair: false })
+    }
+    const q = Math.exp(-((te / 0.07) ** 2)) * Math.exp(-((dist / 0.17) ** 2))
+    const ev = Math.round(60 + 52 * q + rand(-2, 2))
+    const la = 26 + ((p.T.y - aimPt.y) / 0.17) * 28 + rand(-3, 3) // aiming over the ball tops it, under it pops it up
+    const spray = -te * 420 + rand(-4, 4) // early pulls (toward +x for a right-handed hitter)
+    const foul = Math.abs(spray) > 42
+    let ft, label
+    if (la < 8) { ft = Math.round(ev * 1.4); label = 'Ground ball' }
+    else if (la > 52) { ft = Math.round(150 + ev * 0.6); label = 'Pop up' }
+    else { ft = Math.round(ev * 4.05 * (1 - ((la - 27) / 40) ** 2)); label = ft > 300 ? 'Deep fly' : 'Line drive' }
+    const hr = !foul && la >= 8 && la <= 52 && ft >= 370
+    if (foul) label = 'Foul'
+    // the ball leaves the bat
+    const a = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(la, -10, 70)), sp = THREE.MathUtils.degToRad(spray)
+    const speed = 6 + q * 9
+    hitV.set(Math.sin(sp) * Math.cos(a), Math.sin(a), Math.cos(sp) * Math.cos(a)).multiplyScalar(speed)
+    derby.ball = { v: hitV.clone(), t: 0 }
+    seamRing.visible = false
+    trailPts.length = 0
+    trail.material.color.set(hr ? '#ffb547' : '#f0f4ff')
+    if (hr) {
+      burst(new THREE.Vector3(MACHINE.x, MACHINE.y + 2.0, MACHINE.z - 0.5), true, -1.1)
+      say(`Home run! ${ft} ft · ${ev} mph off the bat`, 2.6)
+    } else say(foul ? `Foul ball · ${ev} mph` : `${label} · ${ft} ft`, 2)
+    record({ pitch: name, label: hr ? `HR · ${ft} ft` : foul ? 'Foul' : `${label} · ${ft} ft`, ft: foul ? 0 : ft, hr, fair: !foul })
+  }
+  function showSummary() {
+    derby.phase = 'summary'
+    stage.classList.remove('derby')
+    pitchBall.visible = trail.visible = false
+    const s = derby.swings, hrs = s.filter((x) => x.hr).length
+    const best = Math.max(0, ...s.map((x) => x.ft)), total = s.reduce((n, x) => n + x.ft, 0)
+    if (best > derbyBest) { derbyBest = best; try { localStorage.setItem('wos_derby_best', String(best)) } catch { /* storage blocked */ } }
+    derbySum.innerHTML = `<h3>Round complete</h3><div class="big">${hrs} home run${hrs === 1 ? '' : 's'}</div>` +
+      `<ol>${s.map((x, i) => `<li class="${x.hr ? 'hr' : ''}"><span>${i + 1} · ${x.pitch}</span><b>${x.label}</b></li>`).join('')}</ol>` +
+      `<p style="margin:0 0 14px;color:var(--text-dim)">Longest <b style="color:var(--text)">${best} ft</b> · Total <b style="color:var(--text)">${total} ft</b> · Best ever <b style="color:var(--text)">${derbyBest} ft</b></p>` +
+      '<div class="row"><button type="button" data-a="again">Swing again</button><button type="button" data-a="exit">Back to room</button></div>'
+    derbySum.classList.add('show')
+    derbySum.querySelector('button')?.focus({ preventScroll: true })
+    drawDerbyBoard(`${hrs} HR THIS ROUND`, `BEST  ${derbyBest} FT`)
+  }
+  // per-frame derby update: state machine, pitch flight, batted ball, bat swing, machine lamp/wheels
+  function derbyStep(dt) {
+    const t = nowS()
+    const d = derby
+    if (d.phase === 'ready' && t > d.until) { d.phase = 'windup'; d.until = t + rand(1.0, 1.6); updateDerbyHud() }
+    else if (d.phase === 'windup' && t > d.until) startPitch()
+    else if (d.phase === 'result' && t > d.until) {
+      d.swing = null
+      if (d.swings.length >= SWINGS) showSummary()
+      else { d.phase = 'windup'; d.until = t + rand(0.9, 1.5); pitchBall.visible = trail.visible = false; updateDerbyHud() }
+    }
+    // machine: wheels spin up in the windup, the lamp blinks then takes the pitch's colour
+    const spin = d.phase === 'windup' ? 6 + 30 * (1 - Math.max(0, d.until - t) / 1.6) : d.phase === 'pitch' ? 36 : 8
+    wheels[0].rotateY(spin * dt); wheels[1].rotateY(-spin * dt)
+    if (d.phase === 'windup') { lampMat.emissive.set('#00ff88'); lampMat.emissiveIntensity = Math.sin(t * 14) > 0 ? 2.2 : 0.2 }
+    else lampMat.emissiveIntensity = d.phase === 'pitch' ? 2.4 : 0.6
+    // the pitch in flight (until it's hit)
+    const p = d.pitch
+    let cue = 0
+    if (d.phase === 'pitch' || (d.phase === 'result' && !d.ball && p)) {
+      const u = (t - p.t0) / p.dur
+      pitchAt(p, u, pitchBall.position)
+      pitchBall.rotateOnWorldAxis(spinAxis, PITCHES[p.type].rps * dt)
+      // predicted crossing point + remaining path fade in once the pitch has been read for a moment
+      if (d.phase === 'pitch' && u < 1.05) {
+        cue = THREE.MathUtils.smoothstep(u, 0.18, 0.45)
+        destRing.position.set(p.T.x, p.T.y, ZONE.z - 0.012)
+        const arr = predGeo.attributes.position.array, u0 = Math.max(0, u)
+        for (let i = 0; i < PRED_N; i++) {
+          pitchAt(p, u0 + ((1 - u0) * i) / (PRED_N - 1), pv)
+          arr[i * 3] = pv.x; arr[i * 3 + 1] = pv.y; arr[i * 3 + 2] = pv.z
+        }
+        predGeo.attributes.position.needsUpdate = true
+        predLine.computeLineDistances()
+      }
+      if (pitchBall.position.z < ZONE.z - 1.4) pitchBall.visible = trail.visible = false
+      if (d.phase === 'pitch' && d.swing && !d.swing.done && t >= d.swing.contactAt) resolveSwing()
+      else if (d.phase === 'pitch' && !d.swing && u > 1.35) {
+        d.phase = 'result'; d.until = t + 0.9
+        say('Taken · it doesn’t count', 1.2)
+      }
+    }
+    destRing.material.opacity += (cue * 0.55 - destRing.material.opacity) * Math.min(1, dt * 12)
+    predLine.material.opacity += (cue * 0.3 - predLine.material.opacity) * Math.min(1, dt * 12)
+    destRing.visible = predLine.visible = destRing.material.opacity > 0.01
+    // batted ball: simple flight with bounces off the room
+    if (d.ball) {
+      const b = d.ball, bp = pitchBall.position
+      b.t += dt
+      b.v.y -= GRAV * dt
+      bp.addScaledVector(b.v, dt)
+      const lim = [['x', R2.l, -1], ['x', R2.r, 1], ['z', R2.back, -1], ['z', R2.front, 1], ['y', R2.ceil, 1]]
+      for (const [ax, L, sg] of lim) if ((bp[ax] - L) * sg > -0.065) { bp[ax] = L - sg * 0.065; if (b.v[ax] * sg > 0) b.v[ax] *= -0.45 }
+      if (bp.y < R2.floor + 0.065) { bp.y = R2.floor + 0.065; if (b.v.y < 0) b.v.y *= -0.45; b.v.x *= 0.85; b.v.z *= 0.85 }
+      pitchBall.rotateOnWorldAxis(spinAxis, 20 * dt)
+      if (b.t > 3) pitchBall.visible = trail.visible = false
+    }
+    // colour trail behind the ball
+    if (pitchBall.visible) {
+      trailPts.unshift(pitchBall.position.clone())
+      if (trailPts.length > TRAIL_N) trailPts.length = TRAIL_N
+      const arr = trailGeo.attributes.position.array
+      for (let i = 0; i < TRAIL_N; i++) {
+        const q = trailPts[Math.min(i, trailPts.length - 1)]
+        arr[i * 3] = q.x; arr[i * 3 + 1] = q.y; arr[i * 3 + 2] = q.z
+      }
+      trailGeo.attributes.position.needsUpdate = true
+    }
+    // the bat: cocked behind the hitter, then a fast level sweep through the zone
+    const s = d.swing ? (t - d.swing.t0) / 0.22 : 0
+    const k = THREE.MathUtils.clamp(s, 0, 1)
+    batArm.rotation.y = THREE.MathUtils.lerp(Math.PI / 2 - 0.3, Math.PI * 1.5 + 0.25, k)
+    batArm.rotation.z = d.swing ? (k < 0.5 ? THREE.MathUtils.lerp(0.95, -0.08, k * 2) : THREE.MathUtils.lerp(-0.08, 0.7, (k - 0.5) * 2)) : 0.95
+    if (!d.swing) batPivot.position.y += ((ZONE.y0 + ZONE.y1) / 2 + 0.05 - batPivot.position.y) * Math.min(1, dt * 4)
+  }
+
   // ---------- power state, mirrored from the existing LED ----------
   let flickerUntil = 0
   const clock = new THREE.Clock()
@@ -771,8 +1350,9 @@ async function init() {
     flickerUntil = clock.elapsedTime + 0.7
     booting = true
     unfocus()
+    exitDerby(true)
     setHover(null)
-    pressed.clear()
+    resetInput()
     if (held) drop()
     // walk back to the desk view, turning the shortest way round
     const turns = Math.round((cur.yaw - WALK.yaw0) / (Math.PI * 2))
@@ -780,15 +1360,17 @@ async function init() {
   }).observe(ledEl, { attributes: true, attributeFilter: ['class'] })
 
   let zoomT0 = -1
-  window.WOS3D = { zoom() { if (!REDUCE) zoomT0 = clock.elapsedTime } }
-
+  // busy(): the room is mid-activity (batting), so keyboard shortcuts must not boot the computer
+  window.WOS3D = { zoom() { if (!REDUCE) zoomT0 = clock.elapsedTime }, busy: () => !!derby }
   // ---------- once the desktop takes over: stop, and get out of the way ----------
   let raf = 0
   new MutationObserver(() => {
     if (bootEl.classList.contains('hidden')) {
-      pressed.clear()
+      exitDerby(true)
+      resetInput()
       unlockLook()
-      for (const el of [cueEl, backEl, keysEl, padEl, crossEl]) el.classList.remove('show')
+      me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
+      for (const el of [cueEl, backEl, keysEl, padEl, crossEl, meterEl]) el.classList.remove('show')
       setTimeout(() => {
         cancelAnimationFrame(raf)
         raf = 0
@@ -798,7 +1380,7 @@ async function init() {
   }).observe(bootEl, { attributes: true, attributeFilter: ['class'] })
 
   // ---------- loop ----------
-  let power = 0, cueAmt = 0, lightAmt = 1, focusDist = 5
+  let power = 0, cueAmt = 0, lightAmt = 1
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), dir = new THREE.Vector3()
   const walkPos = new THREE.Vector3(), walkLook = new THREE.Vector3()
   const fwd = new THREE.Vector3(), toMon = new THREE.Vector3()
@@ -810,11 +1392,9 @@ async function init() {
 
   // solid boxes the ball bounces off: [minX, minY, minZ, maxX, maxY, maxZ]
   const BALL_BOXES = [
-    [-2.15, ROOM.floor, -0.75, 2.65, 0, 1.35], // desk
-    [-1.03, 0, -0.7, 1.03, 1.85, 0.08], // monitor
-    [1.27, 0, -0.85, 2.17, 1.45, 0.55], // tower
-    [HOOP_X - 0.45, 1.65, ROOM.front - 0.065, HOOP_X + 0.45, 2.25, ROOM.front], // backboard
-    [HOOP_X - 0.35, 2.45, ROOM.front - 0.075, HOOP_X + 0.35, 2.75, ROOM.front], // ticker
+    [HOOP_X - 0.45, 1.65, R2.back, HOOP_X + 0.45, 2.25, R2.back + 0.065], // backboard
+    [HOOP_X - 0.35, 2.45, R2.back, HOOP_X + 0.35, 2.75, R2.back + 0.075], // ticker
+    [PLATE_X - 0.35, R2.floor, PLATE_Z + MOUND_DIST - 0.4, PLATE_X + 0.35, R2.floor + 2.3, PLATE_Z + MOUND_DIST + 0.4], // pitching machine
   ]
   function ballStep(h) {
     const p = ball.position, r = BALL_R
@@ -828,12 +1408,12 @@ async function init() {
       if (bv[ax] * sgn > 0) bv[ax] *= -e
       return true
     }
-    if (bounce('y', ROOM.floor, -1, 0.62)) {
+    if (bounce('y', R2.floor, -1, 0.62)) {
       const f = Math.max(0, 1 - 2.2 * h)
       bv.x *= f; bv.z *= f
       if (Math.abs(bv.y) < 0.35) bv.y = 0
     }
-    bounce('y', ROOM.ceil, 1); bounce('x', ROOM.l, -1); bounce('x', ROOM.r, 1); bounce('z', ROOM.back, -1); bounce('z', ROOM.front, 1)
+    bounce('y', R2.ceil, 1); bounce('x', R2.l, -1); bounce('x', R2.r, 1); bounce('z', R2.back, -1); bounce('z', R2.front, 1)
     // furniture
     for (const [x0, y0, z0, x1, y1, z1] of BALL_BOXES) {
       tmp.set(THREE.MathUtils.clamp(p.x, x0, x1), THREE.MathUtils.clamp(p.y, y0, y1), THREE.MathUtils.clamp(p.z, z0, z1))
@@ -877,20 +1457,24 @@ async function init() {
     raf = requestAnimationFrame(frame)
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime
 
-    // lights
-    lightAmt += ((lightsOn ? 1 : 0) - lightAmt) * Math.min(1, dt * 7)
-    const L = lightAmt
-    hemi.intensity = 0.1 + 0.4 * L
-    key.intensity = 70 * L
-    wash.intensity = 30 * L
-    fill.intensity = 32 * L
-    fill2.intensity = 20 * L
-    lampLight.intensity = 9 * L
-    bulbMat.emissiveIntensity = 2 * L
-    ceilMat.emissiveIntensity = 1.4 * L
-    rim.intensity = 2 + 6 * L
-    rocker.rotation.x = lightsOn ? -0.28 : 0.28
-    locator.emissiveIntensity = (1 - L) * 1.6
+    // lights: B = 0 is the room's base mood lighting, B = 1 (switch up) is a clearly brighter room
+    lightAmt += ((lightsOn ? 1 : 0) - lightAmt) * Math.min(1, dt * 6)
+    const B = lightAmt, L = 1 // L: the base level every mood-dependent glow is tuned against
+    hemi.intensity = 0.5 + 0.75 * B
+    key.intensity = 70 + 55 * B
+    wash.intensity = 30 + 18 * B
+    fill.intensity = 32 + 58 * B
+    fill2.intensity = 20 + 48 * B
+    lampLight.intensity = 9
+    bulbMat.emissiveIntensity = 2
+    ceilMat.emissiveIntensity = 1.4 + 2.2 * B
+    rim.intensity = 8
+    renderer.toneMappingExposure = 1.2 + 0.3 * B
+    for (const [l, p0] of lamps2) l.intensity = p0 * (0.7 + 0.5 * B)
+    hemi2.intensity = 10 + 8 * B
+    fixtureMat.emissiveIntensity = 1.4 + 1.4 * B
+    rocker.rotation.x = lightsOn ? -0.3 : 0.3
+    locator.emissiveIntensity = 0.5 + 0.35 * Math.sin(t * 2.4) + (lightsOn ? 0 : 0.4)
 
     // power + guidance cue
     power += ((on ? 1 : 0) - power) * Math.min(1, dt * 2.2)
@@ -910,8 +1494,10 @@ async function init() {
       g.userData.mat.emissiveIntensity += (want - g.userData.mat.emissiveIntensity) * Math.min(1, dt * 10)
     }
     for (const m of marks) m.tick(t, L)
-    sky.tick(t)
-    outsideLeft.tick(t)
+    // the painted scenes run livelier while a window is being looked at up close
+    const close = focused?.userData.kind === 'window' ? focusAmt : 0
+    sky.tick(t, dt, focused === windowGroups[1] ? close : 0)
+    outsideLeft.tick(t, dt, focused === windowGroups[0] ? close : 0)
 
     // look
     // light smoothing: removes mouse jitter without feeling laggy
@@ -921,27 +1507,71 @@ async function init() {
     const y = cur.yaw, p = cur.pitch
     dir.set(Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p))
 
-    // walk: keys / pad / wheel → velocity in the floor plane, then slide along walls and furniture
+    // walk: keys / pad → wish direction in the floor plane
     const sy = Math.sin(cur.yaw), cy = Math.cos(cur.yaw)
     const ix = (pressed.has('KeyD') ? 1 : 0) - (pressed.has('KeyA') ? 1 : 0)
     const iz = (pressed.has('KeyW') ? 1 : 0) - (pressed.has('KeyS') ? 1 : 0)
     if (booting) {
+      // auto-walk back to the desk view: settle onto the floor, no momentum
       wish.subVectors(WALK.home, me.p).setY(0)
       if (wish.length() > 0.02) wish.multiplyScalar(Math.min(4, wish.length() * 3) / wish.length())
       else wish.set(0, 0, 0)
+      me.v.lerp(wish, 1 - Math.exp(-dt * 6))
     } else {
       wish.set(-sy * iz + cy * ix, 0, -cy * iz - sy * ix)
+      if (derby) wish.set(0, 0, 0)
+      let wishSpeed = 0
       if (wish.lengthSq() > 0) {
-        wish.normalize().multiplyScalar(pressed.has('run') ? WALK.run : WALK.speed)
-        if (!walked) { walked = true; keysEl.classList.add('dim') }
+        wish.normalize()
+        wishSpeed = pressed.has('run') ? WALK.run : WALK.speed
+        if (!walked) walked = t // the controls hint fades out a few seconds after you start moving
       }
+      // jump: a press is buffered briefly; holding Space re-jumps on every landing
+      me.jumpBuf = Math.max(0, me.jumpBuf - dt)
+      const wantJump = !derby && (me.jumpBuf > 0 || pressed.has('jump'))
+      const onGround = me.grounded // the take-off frame still gets ground acceleration, just no friction
+      if (me.grounded && wantJump) {
+        me.vy = MOVE_PHYS.jump
+        me.grounded = false
+        me.jumpBuf = 0
+        // landing straight into a jump skips ground friction, so speed carries (bunny hop)
+      } else if (me.grounded) {
+        // ground friction, then accelerate toward the wish speed (smooth starts and stops)
+        const sp = me.v.length()
+        if (sp > 1e-4) {
+          const drop = Math.max(sp, MOVE_PHYS.stop) * MOVE_PHYS.friction * dt
+          me.v.multiplyScalar(Math.max(0, sp - drop) / sp)
+        }
+      }
+      if (wishSpeed > 0) {
+        // air: only the part of the wish beyond the current velocity is added (strafe + turn gains speed)
+        const cap = onGround ? wishSpeed : Math.min(wishSpeed, MOVE_PHYS.airCap)
+        const add = cap - me.v.dot(wish)
+        if (add > 0) me.v.addScaledVector(wish, Math.min(add, (onGround ? MOVE_PHYS.accel : MOVE_PHYS.airAccel) * wishSpeed * dt))
+      }
+      const hs = me.v.length()
+      if (hs > MOVE_PHYS.max) me.v.multiplyScalar(MOVE_PHYS.max / hs)
     }
-    // gentle ease in / ease out (no head bob, no sudden starts or stops)
-    me.v.lerp(wish, 1 - Math.exp(-dt * 6))
     if (me.v.lengthSq() < 1e-8) me.v.set(0, 0, 0)
+    // vertical: gravity, land on the floor (with a small knee dip), bump the ceiling
+    if (!me.grounded || me.h > 0) {
+      me.vy -= MOVE_PHYS.grav * dt
+      me.h += me.vy * dt
+      if (me.h <= 0) { me.land = Math.min(0.12, -me.vy * 0.018); me.h = 0; me.vy = 0; me.grounded = true }
+      const headroom = (inRoom2(me.p) ? R2.ceil : ROOM.ceil) - 0.25 - WALK.eye
+      if (me.h > headroom) { me.h = headroom; me.vy = Math.min(0, me.vy) }
+    }
+    me.land = Math.max(0, me.land - dt * 0.6)
+    // move, then slide along walls/furniture: velocity into whatever we hit is removed
     me.p.addScaledVector(me.v, dt)
+    const bx = me.p.x, bz = me.p.z
     collide(me.p)
-    walkPos.set(me.p.x, WALK.eye, me.p.z)
+    const cx = me.p.x - bx, cz = me.p.z - bz, cl = Math.hypot(cx, cz)
+    if (cl > 1e-6) {
+      const nx = cx / cl, nz = cz / cl, vn = me.v.x * nx + me.v.z * nz
+      if (vn < 0) { me.v.x -= nx * vn; me.v.z -= nz * vn }
+    }
+    walkPos.set(me.p.x, WALK.eye + me.h - me.land, me.p.z)
     walkLook.copy(walkPos).addScaledVector(dir, -4)
 
     // poster focus blend
@@ -952,6 +1582,9 @@ async function init() {
     const fk = smooth(focusAmt)
     pos.lerpVectors(walkPos, focusPos, fk)
     look.lerpVectors(walkLook, focusLook, fk)
+    // batting view: behind the plate, looking out at the machine
+    derbyAmt = THREE.MathUtils.clamp(derbyAmt + (derby ? dt : -dt) / 0.8, 0, 1)
+    if (derbyAmt > 0) { const dk = smooth(derbyAmt); pos.lerp(DCAM, dk); look.lerp(DLOOK, dk) }
 
     // dolly into the screen at the end of the boot
     if (zoomT0 >= 0) {
@@ -972,6 +1605,21 @@ async function init() {
       for (let i = 0; i < n; i++) ballStep(dt / n)
       if (shot && (shot.t += dt) > 5) shot = null
     }
+    updateCharge()
+    meterFlash = Math.max(0, meterFlash - dt)
+    if (!charge && meterFlash <= 0) meterEl.classList.remove('show')
+
+    // derby station: live game, or the machine idling
+    if (derby) derbyStep(dt)
+    else {
+      wheels[0].rotateY(2 * dt); wheels[1].rotateY(-2 * dt)
+      lampMat.emissiveIntensity = 0.5 + 0.4 * Math.sin(t * 2)
+    }
+    const showZone = derby && derby.phase !== 'summary' ? derbyAmt : 0
+    zoneLine.material.opacity = 0.5 * showZone
+    aimRing.material.opacity = 0.85 * showZone
+    zoneLine.visible = aimRing.visible = showZone > 0.01
+    aimRing.position.copy(aimPt).z -= 0.01
 
     // confetti + rim flash + net swish
     if (confetti.visible) {
@@ -1011,9 +1659,9 @@ async function init() {
     toMon.copy(SCREEN_POS).sub(pos)
     const monDist = toMon.length()
     const aim = fwd.dot(toMon.normalize())
-    const idle = !on && !booting && focusAmt < 0.05
+    const idle = !on && !booting && !derby && focusAmt < 0.05 && pos.z > SCREEN_POS.z + 0.2 && pos.z < ROOM.front // in front of the screen, same room
     const prox = idle ? THREE.MathUtils.clamp((4.6 - monDist) / 2.4, 0, 1) : 0
-    const aimed = idle && aim > 0.94 && monDist < 7.5
+    const aimed = idle && aim > 0.94 && monDist < REACH
     glowAmt += (Math.max(prox * 0.75, aimed ? 1 : 0, hoverKind === 'computer' ? 1 : 0) - glowAmt) * Math.min(1, dt * 4)
     cueAmt += (((aimed || hoverKind === 'computer' || (prox > 0.55 && aim > 0.55)) && !on ? 1 : 0) - cueAmt) * Math.min(1, dt * 4)
 
@@ -1024,21 +1672,22 @@ async function init() {
       else if (!focusOn && (frameN++ & 3) === 0) setHover(pickCenter())
       crossEl.classList.toggle('hot', !!hoverKind && !focusOn)
     }
-    const text = on ? null : t < msgUntil ? msg : held ? (COARSE ? 'Tap anywhere to shoot' : 'Press R to shoot')
-      : cueAmt > 0.5 ? 'Click the computer to enter' : LOCKABLE && !aiming() && !focusOn && !booting ? 'Click to look around' : null
+    const enterCue = window.WOS_RESUME ? 'Click the computer to resume' : 'Click the computer to enter'
+    const text = on ? null : t < msgUntil ? msg
+      : derby ? (derby.phase === 'windup' ? 'Pitch coming…' : derby.phase === 'ready' ? 'Get set…' : null)
+      : held ? (COARSE ? 'Hold anywhere, release in the green' : 'Hold R or click · release in the green')
+      : hoverKind === 'derby' || onPlate() ? 'Click to bat · Home Run Derby'
+      : hoverKind === 'window' ? 'Click to look closer'
+      : hoverKind === 'switch' ? (lightsOn ? 'Click to dim the lights' : 'Click to brighten the room')
+      : cueAmt > 0.5 ? enterCue : LOCKABLE && !aiming() && !focusOn && !booting ? 'Click to look around' : null
     if (text && text !== shownText) cueText.textContent = text
     shownText = text
     cueEl.classList.toggle('show', !!text)
-    keysEl.classList.toggle('show', !booting && !on && focusAmt < 0.5)
-    padEl.classList.toggle('show', COARSE && !booting && !on && focusAmt < 0.5)
+    keysEl.classList.toggle('show', !booting && !on && !derby && focusAmt < 0.5 && (!walked || t - walked < 4))
+    padEl.classList.toggle('show', COARSE && !booting && !on && !derby && focusAmt < 0.5)
     padEl.classList.toggle('holding', held)
 
-    if (composer) {
-      let fd = focusAmt > 0.5 ? pos.distanceTo(focusLook) : aim > 0.9 ? monDist : wallHit(pos, fwd)
-      focusDist += (fd - focusDist) * Math.min(1, dt * 4)
-      bokeh.uniforms.focus.value = focusDist
-      composer.render()
-    } else renderer.render(scene, camera)
+    renderer.render(scene, camera) // no post-processing: the scene renders sharp
     css.render(cssScene, camera)
   }
   frame()
@@ -1129,9 +1778,11 @@ async function init() {
     for (const yy of [-0.42, 0.42]) add(new THREE.BoxGeometry(0.24, 0.06, 0.06), trim, 0, yy, -0.04, g)
   }
 
-  function windowFrame(side) {
+  function windowFrame(side, title) {
     const g = group(...onWall(side, WIN.z, WIN.y), FACE[side])
     const { w, h } = WIN
+    // zoom: tighter framing than a poster
+    Object.assign(g.userData, { kind: 'window', size: { w, h }, title, zoom: 0.44 })
     const bars = [[w + 0.1, 0.06, 0, h / 2 + 0.03], [w + 0.1, 0.06, 0, -h / 2 - 0.03], [0.06, h + 0.12, w / 2 + 0.03, 0], [0.06, h + 0.12, -w / 2 - 0.03, 0], [0.035, h, 0, 0], [w, 0.035, 0, 0.15]]
     for (const [bw, bh, x, y] of bars) add(new THREE.BoxGeometry(bw, bh, 0.06), frameMat, x, y, 0.02, g, false)
     for (const [bw, bh, x, y] of [[w, 0.02, 0, h / 2], [w, 0.02, 0, -h / 2], [0.02, h, w / 2, 0], [0.02, h, -w / 2, 0]]) {
@@ -1139,6 +1790,7 @@ async function init() {
     }
     add(new THREE.BoxGeometry(w + 0.2, 0.04, 0.18), frameMat, 0, -h / 2 - 0.05, 0.08, g)
     add(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: '#8fb0ff', transparent: true, opacity: 0.05, depthWrite: false }), 0, 0, -0.02, g, false)
+    return g
   }
 
   function plant(x, y, z, s) {
@@ -1155,61 +1807,275 @@ async function init() {
     }
   }
 
-  // Across the street, out the left window: an all-night diner on a dark corner.
+  // Out the left window: the 1942 corner diner. A glass wedge with a rounded nose and no street
+  // door, a long counter under fluorescent light, two coffee urns, the couple (red blouse, dark
+  // suit), the lone man with his back to the street, the waiter in white, dark red brick above
+  // and the Phillies cigar sign on the roof. Local frame: x = right as seen from the room, z = toward the room.
   function nighthawks() {
     const g = new THREE.Group()
+    g.position.set(-10.8, -1.45, WIN.z)
+    g.rotation.y = Math.PI / 2
     scene.add(g)
-    const put = (geo, mat, x, y, z, rx = 0, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); g.add(m); return m }
-    const GY = -1.45, DX = -10.8, Z0 = 2.4
-    put(new THREE.PlaneGeometry(60, 30), flat('#04060b'), -26, 6, Z0, 0, Math.PI / 2)
-    put(new THREE.PlaneGeometry(24, 40), flat('#0a0b0e'), -16, GY, Z0, -Math.PI / 2)
-    put(new THREE.BoxGeometry(1.4, 0.1, 18), flat('#1e1c17'), DX + 0.7, GY + 0.05, Z0)
-    put(new THREE.BoxGeometry(1.6, 0.1, 40), flat('#121211'), ROOM.l - 0.8, GY + 0.05, Z0)
-    put(new THREE.PlaneGeometry(5.5, 8), new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, radialGlow('rgba(214,228,160,0.6)')), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), DX + 2.2, GY + 0.11, Z0 + 0.3, -Math.PI / 2)
-    // interior
-    put(new THREE.PlaneGeometry(5.4, 2.2), flat('#c4c58a'), DX - 2.6, GY + 1.1, Z0, 0, Math.PI / 2)
-    put(new THREE.PlaneGeometry(2.6, 5.4), flat('#e4ebc2'), DX - 1.3, GY + 2.2, Z0, Math.PI / 2)
-    put(new THREE.PlaneGeometry(2.6, 5.4), flat('#6a5a40'), DX - 1.3, GY + 0.01, Z0, -Math.PI / 2)
-    put(new THREE.PlaneGeometry(2.6, 2.2), flat('#a9ab72'), DX - 1.3, GY + 1.1, Z0 - 2.7)
-    put(new THREE.BoxGeometry(0.5, 0.9, 3.6), flat('#6b3f22'), DX - 1.15, GY + 0.45, Z0)
-    put(new THREE.BoxGeometry(0.62, 0.05, 3.7), flat('#b9a57c'), DX - 1.15, GY + 0.92, Z0)
-    for (const dz of [-1.4, -0.7, 0, 0.7, 1.4]) {
-      put(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 16), flat('#7a2a22'), DX - 0.6, GY + 0.62, Z0 + dz)
-      put(new THREE.CylinderGeometry(0.025, 0.025, 0.6, 8), flat('#8a8a80'), DX - 0.6, GY + 0.3, Z0 + dz)
+    const put = (geo, mat, x, y, z, ry = 0, rx = 0) => {
+      const m = new THREE.Mesh(geo, mat)
+      m.position.set(x, y, z)
+      m.rotation.order = 'YXZ'
+      m.rotation.set(rx, ry, 0)
+      g.add(m)
+      return m
     }
-    const figure = (x, z, coat, hat) => {
-      put(new THREE.CapsuleGeometry(0.15, 0.32, 4, 10), flat(coat), x, GY + 0.95, z)
-      put(new THREE.SphereGeometry(0.1, 16, 12), flat('#d6b08a'), x, GY + 1.36, z)
-      if (hat) {
-        put(new THREE.CylinderGeometry(0.16, 0.16, 0.015, 20), flat('#1a1c22'), x, GY + 1.43, z)
-        put(new THREE.CylinderGeometry(0.085, 0.095, 0.1, 20), flat('#1a1c22'), x, GY + 1.49, z)
+    // the long glass front runs from back-left to the nose at front-right
+    const P0 = new THREE.Vector2(-4.4, -2.0), D = new THREE.Vector2(5.7, 2.0).normalize(), N = new THREE.Vector2(D.y, -D.x)
+    const LEN = 6.04, PHI = Math.atan2(-D.y, D.x)
+    const at = (s, off) => [P0.x + D.x * s + N.x * off, P0.y + D.y * s + N.y * off]
+    const putA = (geo, mat, s, off, y, ry = PHI, rx = 0) => { const [x, z] = at(s, off); return put(geo, mat, x, y, z, ry, rx) }
+    const NOSE_R = 0.6
+    const [ncx, ncz] = at(LEN, NOSE_R) // nose centre
+    const SIDE_X = ncx + NOSE_R
+    const arc0 = Math.atan2(-N.x, -N.y), arcL = Math.PI / 2 - arc0 // nose arc, from the front glass round to the side glass
+    const glow = (c) => new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, radialGlow(c)), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+
+    // night sky, street, sidewalks lit by the diner
+    put(new THREE.PlaneGeometry(90, 40), flat('#05070b'), 0, 12, -16)
+    put(new THREE.PlaneGeometry(40, 40), flat('#0b0c0d'), 0, 0, 0, 0, -Math.PI / 2)
+    putA(new THREE.BoxGeometry(16, 0.12, 2.3), flat('#262822'), LEN / 2 - 2, -1.2, 0.06)
+    putA(new THREE.BoxGeometry(16, 0.13, 0.12), flat('#3a3b33'), LEN / 2 - 2, -2.3, 0.065)
+    put(new THREE.BoxGeometry(2.3, 0.12, 8), flat('#262822'), SIDE_X + 1.15, 0.06, ncz - 3.6)
+    const spill = putA(new THREE.PlaneGeometry(8.5, 2.6), glow('rgba(214,232,160,0.62)'), LEN / 2 + 0.4, -1.15, 0.13, PHI, -Math.PI / 2)
+    put(new THREE.PlaneGeometry(2.6, 5), glow('rgba(214,232,160,0.45)'), SIDE_X + 1.1, 0.13, ncz - 2.4, 0, -Math.PI / 2)
+
+    // interior: floor, fluorescent ceiling, yellow back wall with the kitchen door
+    const ceilM = flat('#eef1c6')
+    const backM = flat('#d4c98c')
+    putA(new THREE.PlaneGeometry(LEN + 1.2, 3.0), flat('#8d7b55'), LEN / 2, 1.45, 0.3, PHI, -Math.PI / 2)
+    putA(new THREE.PlaneGeometry(LEN + 1.2, 3.0), ceilM, LEN / 2, 1.45, 2.3, PHI, Math.PI / 2)
+    putA(new THREE.PlaneGeometry(LEN + 1.2, 2.0), backM, LEN / 2, 2.9, 1.3)
+    putA(new THREE.PlaneGeometry(0.72, 1.55), flat('#a9904a'), 0.9, 2.88, 1.08)
+    putA(new THREE.PlaneGeometry(LEN + 1.2, 0.08), flat('#6b5a35'), LEN / 2, 2.88, 1.95)
+    put(new THREE.PlaneGeometry(3.4, 2.0), backM, SIDE_X - 1.6, 1.3, ncz - 3.3)
+    // back counter + urns (metal base, glass upper with coffee inside, domed lids)
+    putA(new THREE.BoxGeometry(LEN, 0.9, 0.42), flat('#857049'), LEN / 2, 2.6, 0.75)
+    const metal = flat('#c9c3a8'), metalDark = flat('#8f8a76')
+    const urnGlass = flat('#efe6c4', { transparent: true, opacity: 0.32, depthWrite: false })
+    const urnTops = []
+    for (const s of [0.42, 0.92]) {
+      const [x, z] = at(s, 2.5)
+      put(new THREE.CylinderGeometry(0.17, 0.19, 0.34, 24), metal, x, 1.37, z)
+      put(new THREE.CylinderGeometry(0.13, 0.13, 0.2, 20), flat('#3b2414'), x, 1.63, z)
+      put(new THREE.CylinderGeometry(0.165, 0.165, 0.34, 24, 1, true), urnGlass, x, 1.71, z)
+      put(new THREE.SphereGeometry(0.17, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), metal, x, 1.88, z)
+      put(new THREE.SphereGeometry(0.03, 10, 8), metalDark, x, 2.06, z)
+      putA(new THREE.BoxGeometry(0.05, 0.05, 0.1), metalDark, s, 2.32, 1.3)
+      urnTops.push(new THREE.Vector3(x, 2.05, z))
+    }
+    // the counter: a long run with a rounded end toward the nose
+    const wood = flat('#7b4a2b'), top = flat('#cdb27d')
+    putA(new THREE.BoxGeometry(4.7, 0.82, 0.5), wood, 3.15, 1.35, 0.71)
+    putA(new THREE.BoxGeometry(4.8, 0.05, 0.64), top, 3.15, 1.35, 1.14)
+    {
+      const [x, z] = at(5.5, 1.35)
+      put(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 24), top, x, 1.14, z)
+      put(new THREE.CylinderGeometry(0.25, 0.25, 0.82, 24), wood, x, 0.71, z)
+    }
+    // stools: seat top at SEAT
+    const SEAT = 0.91
+    const STOOLS = [1.2, 1.95, 2.7, 3.45, 4.2, 4.85, 5.45]
+    for (const s of STOOLS) {
+      const [x, z] = at(s, 0.68)
+      put(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 18), flat('#6c2a22'), x, SEAT - 0.03, z)
+      put(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 8), flat('#8f8c80'), x, SEAT - 0.33, z)
+      put(new THREE.TorusGeometry(0.1, 0.01, 6, 20), flat('#8f8c80'), x, SEAT - 0.42, z, 0, Math.PI / 2)
+    }
+    // customers, each centred on a stool: hips on the seat, thighs toward the counter, shins down to
+    // the foot ring, forearms on the counter top. Local -z faces into the diner (toward the counter).
+    const faceIn = PHI
+    const customer = (s, coat, { hat = false, hair = null, skin = '#d8b08a', legs = coat } = {}) => {
+      const [x, z] = at(s, 0.68)
+      const f = new THREE.Group()
+      f.position.set(x, 0, z)
+      f.rotation.y = faceIn
+      g.add(f)
+      const mk = (geo, col, px, py, pz, rx = 0) => {
+        const m = new THREE.Mesh(geo, flat(col))
+        m.position.set(px, py, pz)
+        m.rotation.x = rx
+        f.add(m)
+        return m
       }
+      mk(new THREE.CapsuleGeometry(0.14, 0.28, 4, 10), coat, 0, SEAT + 0.3, -0.03, -0.12)
+      mk(new THREE.SphereGeometry(0.095, 16, 12), skin, 0, SEAT + 0.67, -0.08)
+      if (hair) mk(new THREE.SphereGeometry(0.105, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hair, 0, SEAT + 0.69, -0.07)
+      if (hat) {
+        mk(new THREE.CylinderGeometry(0.16, 0.16, 0.014, 20), '#191c22', 0, SEAT + 0.75, -0.08)
+        mk(new THREE.CylinderGeometry(0.085, 0.095, 0.1, 20), '#191c22', 0, SEAT + 0.81, -0.08)
+      }
+      for (const sx of [-1, 1]) {
+        mk(new THREE.CapsuleGeometry(0.055, 0.2, 3, 8), legs, sx * 0.075, SEAT + 0.05, -0.15, Math.PI / 2)
+        mk(new THREE.CapsuleGeometry(0.048, 0.32, 3, 8), legs, sx * 0.075, SEAT - 0.18, -0.29)
+        mk(new THREE.CapsuleGeometry(0.042, 0.3, 3, 8), coat, sx * 0.17, SEAT + 0.34, -0.2, 1.15)
+      }
+      return f
     }
-    figure(DX - 0.65, Z0 + 1.4, '#1d2230', true)
-    figure(DX - 0.65, Z0 + 0.85, '#9b2b24', false)
-    figure(DX - 0.5, Z0 - 1.2, '#23262e', true)
-    put(new THREE.CapsuleGeometry(0.14, 0.4, 4, 10), flat('#e8e6dc'), DX - 1.75, GY + 1.0, Z0 + 0.2)
-    put(new THREE.SphereGeometry(0.095, 16, 12), flat('#e0bc96'), DX - 1.7, GY + 1.45, Z0 + 0.2)
-    put(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 16), flat('#f4f2ea'), DX - 1.7, GY + 1.54, Z0 + 0.2)
-    for (const dz of [1.9, 2.25]) put(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 20), flat('#b5b3a2'), DX - 2.2, GY + 1.25, Z0 + dz)
-    // glass front + curved corner
-    const glassM = flat('#d6ebcf', { transparent: true, opacity: 0.1, depthWrite: false })
-    put(new THREE.PlaneGeometry(4.6, 2.1), glassM, DX, GY + 1.15, Z0 - 0.3, 0, Math.PI / 2)
-    const corner = put(new THREE.CylinderGeometry(0.8, 0.8, 2.1, 24, 1, true, 0, Math.PI / 2), glassM, DX - 0.8, GY + 1.15, Z0 + 2.0)
-    corner.material.side = THREE.DoubleSide
-    put(new THREE.BoxGeometry(0.15, 0.3, 4.7), flat('#5b2a1c'), DX, GY + 0.15, Z0 - 0.3)
-    put(new THREE.BoxGeometry(0.4, 0.42, 6.0), flat('#22362a'), DX - 0.2, GY + 2.41, Z0 + 0.1)
-    put(new THREE.PlaneGeometry(3.4, 0.55), flat('#ffffff', { map: canvasTex(1024, 166, drawDinerSign) }), DX - 0.15, GY + 2.95, Z0 - 0.2, 0, Math.PI / 2)
-    // the building above and around
-    put(new THREE.BoxGeometry(4.6, 5.0, 9.5), flat('#2c1f19'), DX - 2.5, GY + 5.1, Z0 - 0.6)
-    const winM = [flat('#120d0b'), flat('#120d0b'), flat('#3b5642'), flat('#a88c55')]
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) {
-      put(new THREE.PlaneGeometry(0.7, 0.95), winM[(r * 7 + c * 3) % winM.length], DX - 0.19, GY + 3.4 + r * 1.35, Z0 - 4.2 + c * 1.45, 0, Math.PI / 2)
+    customer(1.95, '#20242c', { hat: true }) // the lone man, back to the street
+    customer(4.2, '#1d2230', { hat: true }) // the man in the dark suit
+    customer(4.85, '#b3261e', { hair: '#9a3c1c', skin: '#e2bd98', legs: '#3a2420' }) // the woman in the red blouse
+
+    // coffee cups set down in front of each customer as the waiter serves them
+    const CUST = [1.95, 4.2, 4.85]
+    const cupM = flat('#f2efe4')
+    const custCups = CUST.map((s) => {
+      const [x, z] = at(s, 1.22)
+      const c = put(new THREE.CylinderGeometry(0.035, 0.03, 0.08, 12), cupM, x, 1.2, z)
+      c.visible = false
+      return c
+    })
+
+    // the waiter: standing figure behind the counter with jointed legs and arms
+    const AISLE = 2.0, FLOOR_Y = 0.3, WALK_SPEED = 0.75, STATION = 0.67
+    const waiter = new THREE.Group()
+    g.add(waiter)
+    const white = flat('#eceae0'), trousers = flat('#dddbd0'), wSkin = flat('#e0bc96')
+    const limb = (parent, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m }
+    const body = new THREE.Group()
+    waiter.add(body)
+    limb(body, new THREE.CapsuleGeometry(0.15, 0.32, 4, 10), white, 0, FLOOR_Y + 1.02, 0)
+    limb(body, new THREE.SphereGeometry(0.095, 16, 12), wSkin, 0, FLOOR_Y + 1.42, 0)
+    limb(body, new THREE.CylinderGeometry(0.085, 0.085, 0.07, 16), flat('#f4f2ea'), 0, FLOOR_Y + 1.53, 0)
+    const hip = (sx) => { const p = new THREE.Group(); p.position.set(sx * 0.08, FLOOR_Y + 0.72, 0); body.add(p); limb(p, new THREE.CapsuleGeometry(0.055, 0.56, 3, 8), trousers, 0, -0.34, 0); return p }
+    const shoulder = (sx) => { const p = new THREE.Group(); p.position.set(sx * 0.19, FLOOR_Y + 1.24, 0); body.add(p); limb(p, new THREE.CapsuleGeometry(0.042, 0.36, 3, 8), white, 0, -0.22, 0); return p }
+    const legL = hip(-1), legR = hip(1), armL = shoulder(-1), armR = shoulder(1)
+    const handCup = limb(armR, new THREE.CylinderGeometry(0.035, 0.03, 0.08, 12), cupM, 0, -0.46, -0.03)
+    handCup.visible = false
+
+    // loop: walk to the urns and brew → carry the cup to a customer and serve → walk the length of
+    // the counter and back → return to the urns for the next customer
+    const dirOf = (name) => (name === 'urns' ? [N.x, N.y] : [-N.x, -N.y]) // facing the back counter or the customers
+    let target = 0, step = 0, stepT = 0, wS = STATION, walkPh = 0, yaw = PHI + Math.PI
+    const steps = () => [
+      { go: STATION },
+      { act: 'brew', dur: 2.8, face: 'urns' },
+      { go: CUST[target] },
+      { act: 'serve', dur: 1.4, face: 'customers' },
+      { go: 1.3 },
+      { act: 'wait', dur: 0.7, face: 'customers' },
+      { go: 5.3 },
+      { act: 'wait', dur: 0.7, face: 'customers' },
+      { go: 3.0 },
+    ]
+    let plan = steps()
+    const place = () => { const [x, z] = at(wS, AISLE); waiter.position.set(x, 0, z) }
+    place()
+    const turnTo = (dx, dz, dt) => {
+      const want = Math.atan2(-dx, -dz) // local -z points along (dx, dz)
+      let d = want - yaw
+      d = Math.atan2(Math.sin(d), Math.cos(d))
+      yaw += d * Math.min(1, dt * 6)
+      waiter.rotation.y = yaw
     }
-    put(new THREE.BoxGeometry(5, 6.5, 8), flat('#16130f'), DX - 2.5, GY + 3.25, Z0 + 8.5)
-    put(new THREE.PlaneGeometry(2.2, 1.6), flat('#22302a'), DX - 0.01, GY + 1.0, Z0 + 6.4, 0, Math.PI / 2)
-    put(new THREE.BoxGeometry(5, 7, 8), flat('#1a1612'), DX - 2.5, GY + 3.5, Z0 - 10)
-    return { tick() {} }
+    // arm angles: positive raises the arm forward (toward local -z)
+    const pose = (legs, armLx, armRx, bob = 0) => {
+      legL.rotation.x = legs; legR.rotation.x = -legs
+      armL.rotation.x = armLx; armR.rotation.x = armRx
+      body.position.y = bob
+    }
+    function updateWaiter(dt) {
+      const cur = plan[step]
+      stepT += dt
+      if (cur.go !== undefined) {
+        const dS = cur.go - wS, dir = Math.sign(dS)
+        const move = Math.min(Math.abs(dS), WALK_SPEED * dt)
+        wS += dir * move
+        place()
+        if (dir) turnTo(D.x * dir, D.y * dir, dt)
+        walkPh += dt * 7
+        const sw = Math.sin(walkPh) * 0.45
+        pose(sw, -sw * 0.6, handCup.visible ? 1.25 : sw * 0.6, Math.abs(Math.cos(walkPh)) * 0.025)
+        if (Math.abs(cur.go - wS) < 1e-3) next()
+        return
+      }
+      const [fx, fz] = dirOf(cur.face)
+      turnTo(fx, fz, dt)
+      const k = stepT / cur.dur
+      if (cur.act === 'brew') {
+        if (stepT < dt * 1.5) custCups[target].visible = false // that customer has finished the last cup
+        // reach up to the urn tap, hold the cup under it, then bring it back
+        pose(0, 0.6 + 0.1 * Math.sin(stepT * 5), 1.35 - 0.12 * Math.sin(stepT * 2.2))
+        if (k > 0.35) handCup.visible = true
+      } else if (cur.act === 'serve') {
+        pose(0, 0, 1.25 + Math.sin(Math.min(1, k) * Math.PI) * 0.25)
+        if (k > 0.6 && handCup.visible) { handCup.visible = false; custCups[target].visible = true }
+      } else pose(0, 0.05 * Math.sin(stepT * 3), -0.05 * Math.sin(stepT * 3))
+      if (stepT >= cur.dur) next()
+    }
+    function next() {
+      stepT = 0
+      step++
+      if (step >= plan.length) { step = 0; target = (target + 1) % CUST.length; plan = steps() }
+    }
+
+    // glass: long front, rounded nose, side return; no door anywhere on the street side
+    const glassM = flat('#dcebcf', { transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })
+    putA(new THREE.PlaneGeometry(LEN, 2.0), glassM, LEN / 2, 0, 1.3)
+    put(new THREE.CylinderGeometry(NOSE_R, NOSE_R, 2.0, 24, 1, true, arc0, arcL), glassM, ncx, 1.3, ncz)
+    put(new THREE.PlaneGeometry(3.6, 2.0), glassM, SIDE_X, 1.3, ncz - 1.8, Math.PI / 2)
+    // base, sill and the dark band above the glass, following the same outline
+    const baseM = flat('#4c2018'), band = flat('#203a2f'), trimM = flat('#a8a48e')
+    const baseArc = flat('#4c2018', { side: THREE.DoubleSide }), bandArc = flat('#203a2f', { side: THREE.DoubleSide })
+    putA(new THREE.BoxGeometry(LEN, 0.3, 0.12), baseM, LEN / 2, 0, 0.15)
+    putA(new THREE.BoxGeometry(LEN, 0.04, 0.14), trimM, LEN / 2, 0, 0.31)
+    putA(new THREE.BoxGeometry(LEN, 0.42, 0.14), band, LEN / 2, 0, 2.51)
+    put(new THREE.CylinderGeometry(NOSE_R + 0.02, NOSE_R + 0.02, 0.3, 24, 1, true, arc0, arcL), baseArc, ncx, 0.15, ncz)
+    put(new THREE.CylinderGeometry(NOSE_R + 0.03, NOSE_R + 0.03, 0.42, 24, 1, true, arc0, arcL), bandArc, ncx, 2.51, ncz)
+    put(new THREE.BoxGeometry(0.14, 0.3, 3.6), baseM, SIDE_X, 0.15, ncz - 1.8)
+    put(new THREE.BoxGeometry(0.14, 0.42, 3.6), band, SIDE_X, 2.51, ncz - 1.8)
+    // the Phillies sign on the roof over the nose
+    putA(new THREE.PlaneGeometry(2.7, 0.58), flat('#ffffff', { map: canvasTex(1024, 220, drawDinerSign) }), LEN - 1.55, 0.02, 3.05)
+    for (const s of [LEN - 2.6, LEN - 0.5]) putA(new THREE.BoxGeometry(0.04, 0.3, 0.04), flat('#2a2a26'), s, 0.06, 2.75)
+
+    // the building above: dark red brick, upper windows with half-drawn green shades
+    const brick = flat('#ffffff', { map: canvasTex(512, 512, drawBrick) })
+    brick.map.wrapS = brick.map.wrapT = THREE.RepeatWrapping
+    brick.map.repeat.set(5, 2.5)
+    putA(new THREE.PlaneGeometry(16, 7.2), brick, LEN / 2 - 1.5, 0.35, 6.32)
+    put(new THREE.PlaneGeometry(9, 7.2), brick, SIDE_X + 0.35, 6.32, ncz - 4.2, Math.PI / 2)
+    const facadeGlow = putA(new THREE.PlaneGeometry(9, 1.6), glow('rgba(214,232,160,0.35)'), LEN / 2 + 0.3, 0.33, 3.2)
+    const shadeM = [flat('#1f3326'), flat('#263d2c'), flat('#463a24')]
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 8; c++) {
+      const s = -4.6 + c * 1.45, y = 3.9 + r * 1.55
+      putA(new THREE.PlaneGeometry(0.72, 1.05), flat('#0b0807'), s, 0.33, y)
+      putA(new THREE.PlaneGeometry(0.72, 0.42 + ((c + r) % 3) * 0.08), shadeM[(c * 2 + r) % 3], s, 0.325, y + 0.32 - ((c + r) % 3) * 0.04)
+    }
+    // dark shopfronts down the street to the left, catching a little of the diner's light
+    putA(new THREE.PlaneGeometry(7.6, 2.7), flat('#141712'), -4.0, 0.55, 1.35)
+    for (const [s, c] of [[-6.4, '#1d3328'], [-4.2, '#24392c'], [-2.0, '#2c4434']]) putA(new THREE.PlaneGeometry(1.7, 1.4), flat(c), s, 0.54, 1.25)
+    put(new THREE.BoxGeometry(6, 10, 6), flat('#15110e'), SIDE_X + 4.2, 5, ncz - 7)
+
+    // living details: steam off the urns, a faint fluorescent shimmer, the waiter's rounds
+    const steamMat = new THREE.SpriteMaterial({ map: canvasTex(64, 64, radialGlow('rgba(245,245,235,0.9)')), transparent: true, depthWrite: false, opacity: 0 })
+    const steam = Array.from({ length: 16 }, (_, i) => {
+      const sp = new THREE.Sprite(steamMat.clone())
+      g.add(sp)
+      return { sp, src: urnTops[i % 2], ph: i / 16 }
+    })
+    const ceilBase = ceilM.color.clone(), backBase = backM.color.clone()
+    let steamT = 0
+    return {
+      tick(t, dt = 0.016, close = 0) {
+        steamT += dt * (0.22 + close * 0.25)
+        for (const q of steam) {
+          const k = (steamT + q.ph) % 1
+          q.sp.position.set(q.src.x + Math.sin(k * 6 + q.ph * 20) * 0.05 * k, q.src.y + k * 0.45, q.src.z)
+          q.sp.scale.setScalar(0.08 + k * 0.2)
+          q.sp.material.opacity = Math.sin(k * Math.PI) * (0.22 + close * 0.25)
+        }
+        const flick = 1 + (Math.sin(t * 13.7) * Math.sin(t * 3.1) > 0.92 ? -0.05 : 0) + Math.sin(t * 2.3) * 0.008 * (1 + close * 2)
+        ceilM.color.copy(ceilBase).multiplyScalar(flick)
+        backM.color.copy(backBase).multiplyScalar(0.99 + 0.01 * flick)
+        spill.material.opacity = 0.92 + 0.08 * flick
+        facadeGlow.material.opacity = 0.85 + 0.15 * Math.sin(t * 0.7)
+        updateWaiter(dt)
+      },
+    }
   }
 
   // Out the right window: a swirling night sky over a village, cypress in front.
@@ -1217,19 +2083,23 @@ async function init() {
     const g = new THREE.Group()
     scene.add(g)
     const RX = ROOM.r
-    const skyMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 } }, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, fog: false })
-    const skyM = new THREE.Mesh(new THREE.PlaneGeometry(18, 9), skyMat)
+    // the sky is a backdrop far wider and taller than any view through the window; the painted
+    // composition keeps its place in the middle (uScale maps it back) and the swirls run on to every edge
+    const SKY = { w: 96, h: 48 }
+    const skyMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uLive: { value: 0 }, uScale: { value: new THREE.Vector2(SKY.w / 18, SKY.h / 9) } }, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, fog: false })
+    let skyT = 0
+    const skyM = new THREE.Mesh(new THREE.PlaneGeometry(SKY.w, SKY.h), skyMat)
     skyM.position.set(RX + 15, 1.8, WIN.z)
     skyM.rotation.y = -Math.PI / 2
     g.add(skyM)
     const hills = (x, color, base, amp, seed) => {
       const s = new THREE.Shape()
-      s.moveTo(-14, -6)
-      for (let i = 0; i <= 60; i++) {
-        const u = -14 + (28 * i) / 60
+      s.moveTo(-48, -16)
+      for (let i = 0; i <= 160; i++) {
+        const u = -48 + (96 * i) / 160
         s.lineTo(u, base + Math.sin(u * 0.45 + seed) * amp + Math.sin(u * 1.3 + seed * 2) * amp * 0.35)
       }
-      s.lineTo(14, -6)
+      s.lineTo(48, -16)
       const m = new THREE.Mesh(new THREE.ShapeGeometry(s), flat(color))
       m.position.set(x, 0, WIN.z)
       m.rotation.y = -Math.PI / 2
@@ -1277,9 +2147,12 @@ async function init() {
       cypress.add(lathe)
     }
     return {
-      tick(t) {
-        skyMat.uniforms.uTime.value = t
-        cypress.rotation.z = Math.sin(t * 0.6) * 0.02
+      tick(t, dt = 0.016, close = 0) {
+        // up close the swirls turn faster and the stars pulse harder
+        skyT += dt * (1 + close * 1.6)
+        skyMat.uniforms.uTime.value = skyT
+        skyMat.uniforms.uLive.value = close
+        cypress.rotation.z = Math.sin(t * 0.6) * (0.02 + close * 0.015)
         cypress.rotation.x = Math.sin(t * 0.45) * 0.015
       },
     }
@@ -1294,16 +2167,6 @@ function wallWithHole(w, h, hx, hy, hw, hh) {
   hole.moveTo(hx - hw / 2, hy - hh / 2); hole.lineTo(hx - hw / 2, hy + hh / 2); hole.lineTo(hx + hw / 2, hy + hh / 2); hole.lineTo(hx + hw / 2, hy - hh / 2); hole.closePath()
   s.holes.push(hole)
   return new THREE.ShapeGeometry(s)
-}
-
-function wallHit(p, d) {
-  let best = 12
-  for (const [ax, v] of [['x', ROOM.l], ['x', ROOM.r], ['z', ROOM.back], ['z', ROOM.front], ['y', ROOM.floor], ['y', ROOM.ceil]]) {
-    if (Math.abs(d[ax]) < 1e-4) continue
-    const t = (v - p[ax]) / d[ax]
-    if (t > 0.05 && t < best) best = t
-  }
-  return best
 }
 
 function canvasTex(w, h, draw) {
@@ -1702,59 +2565,86 @@ function drawAnalytics(g, w, h) {
   posterTitle(g, w, h, 'ANALYTICS', 'SPORTS DATA · DECISIONS', { size: 66 })
 }
 
-// full depth chart laid out the way an NFL club publishes it:
-// 11-personnel offense, 4-3 base defense with a nickel, specialists, and the 53-man roster mix
+// Washington Commanders depth chart — team's Week 6 2026 chart (Oct 14, 2026). No cap figures.
+const WAS_DEPTH = {
+  offense: [
+    ['QB', 'Daniels', 'Mariota', 'Kaliakmanis'], ['RB', 'Croskey-Merritt', 'R. White', 'Ekeler'],
+    ['WR', 'McLaurin', 'Burks'], ['WR', 'Diggs', 'L. McCaffrey'], ['WR', 'D. Brown', 'A. Williams'],
+    ['TE', 'Okonkwo', 'Sinnott'], ['TE', 'Bates', 'Yankoff'],
+    ['LT', 'Coleman', 'Wylie'], ['LG', 'C. Paul', 'Allegretti'], ['C', 'Patrick', 'Gulbin'], ['RG', 'Cosmi', 'Togiai'], ['RT', 'Conerly Jr.', 'Wylie'],
+  ],
+  defense: [
+    ['DL', 'Payne', 'Omenihu'], ['DL', 'Settle Jr.', 'Tuttle'], ['DL', 'Kinlaw', 'Wise Jr.'],
+    ['OLB', 'Oweh', 'Josephs'], ['OLB', 'Chaisson', 'Armstrong', 'Jean-Baptiste'],
+    ['LB', 'Styles', 'Medrano'], ['LB', 'Luvu', 'Keys'],
+    ['CB', 'Robertson', 'Douglas', 'Yiadom'], ['CB', 'Sainristil', 'Moreau'],
+    ['SS', 'Cross', 'Owens'], ['FS', 'Reaves', 'Q. Martin', 'Butler'],
+  ],
+  special: [['K', 'Stevens'], ['P', 'Way'], ['LS', 'Ott'], ['H', 'Way'], ['KR', 'L. McCaffrey', 'Lane'], ['PR', 'A. Williams', 'L. McCaffrey']],
+}
 function drawSportsMgmt(g, w, h) {
-  posterBase(g, w, h)
-  const cw = 84, ch = 62
-  const chip = (pos, cx, y) => {
-    const x = cx - cw / 2
-    g.fillStyle = 'rgba(26,26,46,0.92)'
-    g.strokeStyle = 'rgba(140,180,255,0.35)'; g.lineWidth = 1.5
-    g.beginPath(); g.roundRect ? g.roundRect(x, y, cw, ch, 8) : g.rect(x, y, cw, ch); g.fill(); g.stroke()
-    mono(g, 15, P.text, pos, cx, y + 21)
-    // 1st / 2nd / 3rd string
-    ;[[1, 'rgba(140,180,255,0.85)'], [0.72, 'rgba(192,200,224,0.38)'], [0.48, 'rgba(192,200,224,0.2)']].forEach(([k, c], i) => {
-      g.fillStyle = c
-      g.fillRect(x + 10, y + 31 + i * 9, (cw - 20) * k, 5)
-    })
+  posterBase(g, w, h, P.surf, 'rgba(90,20,20,0.16)')
+  const BURG = '#e0566a', GOLD = '#FFB612'
+  // header band in team colours
+  g.fillStyle = 'rgba(90,20,20,0.55)'; g.fillRect(0, 0, w, 104)
+  g.fillStyle = GOLD; g.fillRect(0, 104, w, 4)
+  mono(g, 25, '#fff', 'WASHINGTON COMMANDERS', 44, 50, 'left')
+  mono(g, 15, GOLD, '2026 · WEEK 6 DEPTH CHART · 3-4 BASE', 44, 82, 'left')
+  mono(g, 15, P.dim, 'HEAD COACH', w - 44, 50, 'right')
+  mono(g, 21, '#fff', 'DAN QUINN', w - 44, 80, 'right')
+  const label = (t, x0, x1, y) => {
+    mono(g, 15, BURG, t, x0, y, 'left')
+    g.strokeStyle = 'rgba(224,86,106,0.3)'; g.lineWidth = 1
+    g.beginPath(); g.moveTo(x0 + g.measureText(t).width + 12, y - 5); g.lineTo(x1, y - 5); g.stroke()
   }
-  const label = (t, y) => {
-    mono(g, 15, P.acc, t, 44, y, 'left')
-    g.strokeStyle = 'rgba(140,180,255,0.18)'; g.lineWidth = 1
-    g.beginPath(); g.moveTo(44 + g.measureText(t).width + 14, y - 5); g.lineTo(w - 44, y - 5); g.stroke()
+  // one row: position, starter (bright), then the backups (dim); shrinks to fit its column
+  const row = (pos, names, x, y, width) => {
+    g.textAlign = 'left'
+    g.font = '700 15px "JetBrains Mono", monospace'; g.fillStyle = GOLD
+    g.fillText(pos, x, y)
+    const nx = x + 50, room = width - 50
+    let size = 19
+    const fit = () => {
+      g.font = `600 ${size}px Inter, sans-serif`
+      let tw = g.measureText(names[0]).width
+      g.font = `500 ${size - 2}px Inter, sans-serif`
+      if (names.length > 1) tw += g.measureText('  ' + names.slice(1).join(' · ')).width
+      return tw
+    }
+    while (size > 12 && fit() > room) size--
+    g.font = `600 ${size}px Inter, sans-serif`; g.fillStyle = P.text
+    g.fillText(names[0], nx, y)
+    if (names.length > 1) {
+      const sx = nx + g.measureText(names[0]).width
+      g.font = `500 ${size - 2}px Inter, sans-serif`; g.fillStyle = P.muted
+      g.fillText('  ' + names.slice(1).join(' · '), sx, y)
+    }
+    g.strokeStyle = 'rgba(192,200,224,0.07)'; g.lineWidth = 1
+    g.beginPath(); g.moveTo(x, y + 11); g.lineTo(x + width, y + 11); g.stroke()
   }
-  mono(g, 16, P.muted, 'DEPTH CHART', 44, 62, 'left')
-  mono(g, 13, P.muted, '1ST · 2ND · 3RD', w - 44, 62, 'right')
-
-  label('OFFENSE · 11 PERSONNEL', 108)
-  ;[['WR-X', 62], ['LT', 250], ['LG', 350], ['C', 450], ['RG', 550], ['RT', 650], ['TE', 750], ['WR-Z', 838]].forEach(([p, x]) => chip(p, x, 126))
-  chip('SLOT', 156, 206); chip('QB', 450, 206); chip('RB', 450, 286)
-
-  label('DEFENSE · 4-3 BASE / NICKEL', 400)
-  ;[['DE', 285], ['DT', 395], ['DT', 505], ['DE', 615]].forEach(([p, x]) => chip(p, x, 418))
-  ;[['WLB', 330], ['MLB', 450], ['SLB', 570]].forEach(([p, x]) => chip(p, x, 498))
-  ;[['LCB', 62], ['NB', 186], ['SS', 360], ['FS', 540], ['RCB', 838]].forEach(([p, x]) => chip(p, x, 578))
-
-  label('SPECIAL TEAMS', 692)
-  ;['K', 'P', 'LS', 'H', 'KR', 'PR'].forEach((p, i) => chip(p, 88 + i * 145, 710))
-
-  // 53-man roster by position group
-  label('53-MAN ROSTER', 840)
+  const colW = (w - 88 - 30) / 2, xL = 44, xR = 44 + colW + 30
+  label('OFFENSE', xL, xL + colW, 150)
+  WAS_DEPTH.offense.forEach(([p, ...n], i) => row(p, n, xL, 186 + i * 36, colW))
+  label('DEFENSE', xR, xR + colW, 150)
+  WAS_DEPTH.defense.forEach(([p, ...n], i) => row(p, n, xR, 186 + i * 36, colW))
+  label('SPECIAL TEAMS', xL, w - 44, 658)
+  WAS_DEPTH.special.forEach(([p, ...n], i) => row(p, n, i % 2 ? xR : xL, 694 + Math.floor(i / 2) * 36, colW))
+  // 53-man roster by position group (counts only, no cap figures)
+  label('53-MAN ROSTER MIX', xL, w - 44, 830)
   const groups = [['QB', 3], ['RB', 4], ['WR', 6], ['TE', 3], ['OL', 9], ['DL', 9], ['LB', 6], ['CB', 6], ['S', 4], ['ST', 3]]
   let x = 44
   const span = w - 88
   groups.forEach(([p, n], i) => {
     const bw = (span * n) / 53
     const off = i < 5, st = i === 9
-    g.fillStyle = st ? 'rgba(217,185,106,0.6)' : off ? `rgba(140,180,255,${0.75 - i * 0.09})` : `rgba(192,200,224,${0.5 - (i - 5) * 0.08})`
-    g.fillRect(x + 1, 862, bw - 2, 34)
-    mono(g, 13, P.dim, p, x + bw / 2, 922)
-    mono(g, 12, P.muted, String(n), x + bw / 2, 942)
+    g.fillStyle = st ? 'rgba(255,182,18,0.6)' : off ? `rgba(224,86,106,${0.85 - i * 0.1})` : `rgba(192,200,224,${0.5 - (i - 5) * 0.08})`
+    g.fillRect(x + 1, 850, bw - 2, 26)
+    mono(g, 13, P.dim, p, x + bw / 2, 898)
+    mono(g, 12, P.muted, String(n), x + bw / 2, 916)
     x += bw
   })
-  mono(g, 13, P.muted, 'OFFENSE 25 · DEFENSE 25 · SPECIALISTS 3 · PRACTICE SQUAD 16', w / 2, 990)
-  posterTitle(g, w, h, 'SPORTS MANAGEMENT', 'ROSTER CONSTRUCTION · DEPTH CHART', { size: 60 })
+  mono(g, 12, P.muted, 'SOURCE: TEAM UNOFFICIAL DEPTH CHART · OCT 14, 2026', w / 2, 960)
+  posterTitle(g, w, h, 'SPORTS MANAGEMENT', 'ROSTER CONSTRUCTION · DEPTH CHART', { size: 60, accent: GOLD })
 }
 
 // conference wall chart: each member's full name glowing in its primary colour
@@ -1862,14 +2752,75 @@ function drawDeckB(g, w, h) {
   g.fillText('SKATE', w / 2, h / 2 + 14)
 }
 
+// the roof sign: cream board, a cigar, red-brown "PHILLIES"
 function drawDinerSign(g, w, h) {
-  g.fillStyle = '#e9e4d2'; g.fillRect(0, 0, w, h)
-  g.strokeStyle = '#7a2a22'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12)
-  g.fillStyle = '#7a2a22'
-  g.font = '800 92px Georgia, serif'; g.textAlign = 'center'
-  g.fillText('ALL NIGHT', w * 0.42, h * 0.7)
-  g.font = '700 38px Georgia, serif'
-  g.fillText('COFFEE 5¢', w * 0.84, h * 0.64)
+  g.fillStyle = '#e9e2c8'; g.fillRect(0, 0, w, h)
+  g.strokeStyle = '#6e2a1e'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12)
+  // cigar with a band
+  g.save()
+  g.translate(150, h * 0.52); g.rotate(-0.12)
+  g.fillStyle = '#7a4a26'; g.beginPath(); g.ellipse(0, 0, 105, 22, 0, 0, Math.PI * 2); g.fill()
+  g.fillStyle = '#5a3218'; g.fillRect(-105, -22, 26, 44)
+  g.fillStyle = '#b8862e'; g.fillRect(-40, -22, 22, 44)
+  g.fillStyle = '#c9c2b4'; g.beginPath(); g.ellipse(102, 0, 10, 18, 0, 0, Math.PI * 2); g.fill()
+  g.restore()
+  g.fillStyle = '#6e2a1e'; g.textAlign = 'center'
+  g.font = '800 120px Georgia, serif'
+  if ('letterSpacing' in g) g.letterSpacing = '6px'
+  g.fillText('PHILLIES', w * 0.6, h * 0.7)
+  if ('letterSpacing' in g) g.letterSpacing = '0px'
+}
+
+// indoor turf: mown stripes with a little texture
+function drawTurf(g, w, h) {
+  g.fillStyle = '#1f4a2a'; g.fillRect(0, 0, w, h)
+  g.fillStyle = 'rgba(255,255,255,0.035)'; g.fillRect(0, 0, w, h / 2)
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `rgba(${i % 2 ? '10,30,16' : '60,110,70'},0.25)`
+    g.fillRect((i * 97) % w, (i * 61) % h, 2, 3)
+  }
+}
+
+// mini diamond on a 14 × 14 floor decal: plate near the top edge, +z (toward the fence) runs down,
+// +x runs right (3rd-base side for a batter facing the field)
+function drawField(g, w, h) {
+  const u = w / 14, px = w / 2, pz = u * 1.0
+  const BASE = 7.5 * u, r = Math.SQRT1_2
+  const b1 = [px - BASE * r, pz + BASE * r], b2 = [px, pz + BASE * 2 * r], b3 = [px + BASE * r, pz + BASE * r]
+  const dirt = '#7a5a3c', grass = '#24572f'
+  g.clearRect(0, 0, w, h)
+  // infield skin: a fan out past second base, between the foul lines
+  g.fillStyle = dirt
+  g.beginPath(); g.moveTo(px, pz); g.arc(px, pz, BASE * 2 * r + 1.3 * u, Math.PI / 4, (3 * Math.PI) / 4); g.closePath(); g.fill()
+  // grass infield inside the base paths
+  const cx = px, cz = (pz + b2[1]) / 2, k = 0.8
+  const sh = ([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]
+  g.fillStyle = grass
+  g.beginPath(); [[px, pz], b1, b2, b3].map(sh).forEach(([x, z], i) => (i ? g.lineTo(x, z) : g.moveTo(x, z))); g.closePath(); g.fill()
+  // dirt circles at the plate and the mound
+  g.fillStyle = dirt
+  g.beginPath(); g.arc(px, pz, 1.35 * u, 0, Math.PI * 2); g.fill()
+  g.beginPath(); g.arc(px, pz + 8.5 * u, 1.5 * u, 0, Math.PI * 2); g.fill()
+  // foul lines to the edge of the decal, base paths, bases
+  g.strokeStyle = 'rgba(245,245,240,0.92)'; g.lineWidth = 6; g.lineCap = 'round'
+  for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(px, pz); g.lineTo(px + sx * 13 * u * r, pz + 13 * u * r); g.stroke() }
+  g.fillStyle = '#f4f4ee'
+  for (const [x, z] of [b1, b2, b3]) { g.save(); g.translate(x, z); g.rotate(Math.PI / 4); g.fillRect(-0.18 * u, -0.18 * u, 0.36 * u, 0.36 * u); g.restore() }
+  // batter's boxes either side of the plate
+  g.strokeStyle = 'rgba(245,245,240,0.8)'; g.lineWidth = 4
+  for (const sx of [-1, 1]) g.strokeRect(px + (sx < 0 ? -0.95 : 0.32) * u, pz - 0.75 * u, 0.63 * u, 1.5 * u)
+}
+
+// dark red-brown brick with soot-dark mortar, for the building over the diner
+function drawBrick(g, w, h) {
+  g.fillStyle = '#1c0e0b'; g.fillRect(0, 0, w, h)
+  const bw = 64, bh = 22
+  for (let r = 0; r * bh < h; r++) for (let c = -1; c * bw < w; c++) {
+    const x = c * bw + (r % 2 ? bw / 2 : 0), y = r * bh
+    const k = ((r * 7 + c * 13) % 5) / 5
+    g.fillStyle = `rgb(${54 + k * 12},${24 + k * 5},${19 + k * 4})`
+    g.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3)
+  }
 }
 
 const SKY_VERT = /* glsl */`
@@ -1878,6 +2829,8 @@ void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(p
 `
 const SKY_FRAG = /* glsl */`
 uniform float uTime;
+uniform float uLive;
+uniform vec2 uScale;
 varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){
@@ -1892,15 +2845,17 @@ vec2 swirl(vec2 p, vec2 c, float s, float r){
   float cs = cos(a), sn = sin(a);
   return c + vec2(cs * d.x - sn * d.y, sn * d.x + cs * d.y);
 }
+// Indian-yellow star: hot core, pulsing halo and the concentric painted rings around it
 vec3 star(vec2 uv, vec2 c, float s, float t){
   float d = length((uv - c) * vec2(2.0, 1.0));
-  float core = smoothstep(0.02 * s, 0.0, d);
-  float halo = smoothstep(0.1 * s, 0.0, d) * (0.75 + 0.25 * sin(t));
-  float ring = smoothstep(0.01, 0.0, abs(d - 0.065 * s)) * 0.35;
-  return vec3(1.0, 0.86, 0.42) * (core * 1.4 + halo * 0.45 + ring);
+  float tw = 0.7 + 0.3 * sin(t) + uLive * 0.25 * sin(t * 2.7);
+  float core = smoothstep(0.022 * s, 0.0, d);
+  float halo = smoothstep(0.11 * s, 0.0, d) * tw;
+  float ring = smoothstep(0.012, 0.0, abs(d - 0.065 * s)) * 0.4 + smoothstep(0.01, 0.0, abs(d - 0.095 * s)) * 0.18;
+  return vec3(1.0, 0.82, 0.32) * core * 1.5 + vec3(0.98, 0.7, 0.16) * (halo * 0.55 + ring * tw);
 }
 void main(){
-  vec2 uv = vUv;
+  vec2 uv = (vUv - 0.5) * uScale + 0.5; // painting units: 0–1 is the original composition
   vec2 p = uv * vec2(2.0, 1.0);
   float t = uTime;
   p = swirl(p, vec2(0.96, 0.60), 3.2 + 0.35 * sin(t * 0.35), 0.22);
@@ -1908,9 +2863,18 @@ void main(){
   p = swirl(p, vec2(0.70, 0.66), 1.8, 0.13);
   float n = fbm(p * 3.0 + vec2(t * 0.04, 0.0));
   float strokes = 0.5 + 0.5 * sin(p.x * 16.0 + p.y * 7.0 + n * 7.0 + t * 0.5);
-  vec3 deep = vec3(0.03, 0.07, 0.22), mid = vec3(0.10, 0.22, 0.52), pale = vec3(0.42, 0.58, 0.80);
+  vec3 deep = vec3(0.03, 0.04, 0.26), mid = vec3(0.02, 0.22, 0.62), pale = vec3(0.45, 0.63, 0.86); // ultramarine → cobalt → pale strokes
   vec3 col = mix(deep, mid, smoothstep(0.15, 0.95, uv.y + (n - 0.5) * 0.35));
-  col = mix(col, pale, smoothstep(0.7, 1.0, strokes) * 0.42 * smoothstep(0.25, 0.6, uv.y));
+  col = mix(col, deep, smoothstep(1.3, 2.6, uv.y) * 0.6); // deeper ultramarine toward the zenith
+  // smaller stars scattered across the whole sky so no edge is empty
+  vec2 sg = uv * vec2(14.0, 7.0), cell = floor(sg), fr = fract(sg) - 0.5;
+  float hs = hash(cell);
+  if (hs > 0.8 && uv.y > 0.32) {
+    vec2 o = vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5;
+    float sd = length((fr - o * 0.5) * vec2(1.0, 0.5));
+    col += vec3(1.0, 0.8, 0.3) * (smoothstep(0.07, 0.0, sd) * 1.2 + smoothstep(0.22, 0.0, sd) * 0.25) * (0.65 + 0.35 * sin(t * (1.5 + hs) + hs * 40.0));
+  }
+  col = mix(col, pale, smoothstep(0.72, 1.0, strokes) * 0.3 * smoothstep(0.25, 0.6, uv.y));
   col = mix(col, vec3(0.55, 0.62, 0.45), smoothstep(0.85, 1.0, strokes) * 0.12 * smoothstep(0.4, 0.8, uv.y));
   col += star(uv, vec2(0.33, 0.70), 1.0, t * 2.1);
   col += star(uv, vec2(0.40, 0.55), 0.8, t * 1.7 + 1.0);
@@ -1921,10 +2885,13 @@ void main(){
   col += star(uv, vec2(0.27, 0.58), 0.9, t * 1.8 + 6.0);
   col += star(uv, vec2(0.74, 0.56), 0.8, t * 1.6 + 7.0);
   col += star(uv, vec2(0.20, 0.74), 0.7, t * 2.2 + 8.0);
+  col += star(uv, vec2(0.86, 0.62), 0.6, t * 2.4 + 9.0);
+  col += star(uv, vec2(0.13, 0.62), 1.2, t * 1.3 + 10.0); // the bright morning star beside the cypress
   vec2 mq = (uv - vec2(0.67, 0.70)) * vec2(2.0, 1.0);
   float m = length(mq), m2 = length(mq - vec2(0.028, 0.012));
   float crescent = smoothstep(0.055, 0.048, m) * smoothstep(0.04, 0.048, m2);
-  col += vec3(1.0, 0.8, 0.3) * (crescent * 1.6 + smoothstep(0.2, 0.0, m) * 0.35);
-  gl_FragColor = vec4(col * 0.85, 1.0);
+  float mh = smoothstep(0.22, 0.0, m) * 0.4 + smoothstep(0.012, 0.0, abs(m - 0.1)) * 0.22 + smoothstep(0.01, 0.0, abs(m - 0.14)) * 0.12;
+  col += vec3(1.0, 0.78, 0.22) * (crescent * 1.8 + mh * (0.85 + 0.15 * sin(uTime * 0.8)));
+  gl_FragColor = vec4(col * 0.8, 1.0);
 }
 `
