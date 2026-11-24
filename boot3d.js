@@ -25,12 +25,14 @@ const SCREEN_PX = { w: 800, h: 500 }
 const SCREEN_W = 1.76
 const SCREEN_POS = new THREE.Vector3(0, 1.17, 0.075)
 
-const ROOM = { l: -4.6, r: 5.0, back: -1.6, front: 7.6, floor: -1.15, ceil: 3.6 }
+const ROOM = { l: -5.8, r: 6.2, back: -1.6, front: 7.6, floor: -1.15, ceil: 3.6 }
 const ROOM_W = ROOM.r - ROOM.l, ROOM_D = ROOM.front - ROOM.back, ROOM_H = ROOM.ceil - ROOM.floor
 const MID = { x: (ROOM.l + ROOM.r) / 2, z: (ROOM.back + ROOM.front) / 2, y: (ROOM.floor + ROOM.ceil) / 2 }
 const C = new THREE.Vector3(0.2, 1.45, 2.2) // ceiling fixture
 // first-person walker: eye height, speeds (units/s), body radius, start pose, look limits
-const WALK = { eye: 1.7, speed: 2.4, run: 4.2, radius: 0.32, home: new THREE.Vector3(0.87, 1.7, 5.2), yaw0: 0.22, pitch0: 0.1, pitch: [-0.75, 0.95] }
+const WALK = { eye: 1.7, speed: 2.0, run: 3.4, radius: 0.32, home: new THREE.Vector3(0.87, 1.7, 5.2), yaw0: 0.22, pitch0: 0.1, pitch: [-0.75, 0.95] }
+// official logo files for the glowing wall marks (e.g. 'assets/logos/purdue.svg'); empty = built-in outlines
+const TEAM_SVG = { purdue: '', iu: '' }
 const HOOP_X = 1.45, RIM_R = 0.18, BALL_R = 0.09, GRAV = 12
 const WIN = { z: 2.6, y: 1.35, w: 1.8, h: 1.5 }
 
@@ -70,7 +72,10 @@ async function init() {
   keysEl.className = 'room-keys'
   keysEl.innerHTML = COARSE
     ? '<b>Pad</b> walk · <b>Drag</b> look · <b>Tap</b> ball to grab'
-    : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <b>Drag</b> look · <b>Click</b> ball, <kbd>R</kbd> shoot'
+    : '<b>Click</b> to look · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <b>Click</b> ball, <kbd>R</kbd> shoot · <kbd>Esc</kbd> free mouse'
+  const crossEl = document.createElement('div')
+  crossEl.className = 'room-cross'
+  bootEl.append(crossEl)
   const padEl = document.createElement('div')
   padEl.className = 'room-pad'
   padEl.innerHTML = [['KeyW', '▲', 'u'], ['KeyA', '◀', 'l'], ['KeyS', '▼', 'd'], ['KeyD', '▶', 'r']]
@@ -174,10 +179,15 @@ async function init() {
   add(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 48), ceilMat, C.x, ROOM.ceil - 0.02, C.z, scene, false)
   add(new THREE.CylinderGeometry(0.47, 0.47, 0.02, 48), trim, C.x, ROOM.ceil - 0.005, C.z, scene, false)
   // door on the front wall
-  const door = group(3.05, ROOM.floor, ROOM.front, FACE.front)
-  add(rbox(0.98, 2.2, 0.05, 0.01), std('#17172a', 0.7, 0.1), 0, 1.1, 0.03, door)
-  for (const [w, h, x, y] of [[1.12, 0.07, 0, 2.23], [0.07, 2.24, -0.53, 1.12], [0.07, 2.24, 0.53, 1.12]]) add(new THREE.BoxGeometry(w, h, 0.07), frameMat, x, y, 0.035, door)
-  add(new THREE.SphereGeometry(0.035, 16, 12), trim, 0.38, 1.05, 0.08, door)
+  // sized to the walker: eye 2.85 above the floor ≈ 1.65 m, so a 2.03 m × 0.9 m door is 3.5 × 1.55
+  const DOOR = { w: 1.55, h: 3.5 }
+  const door = group(4.4, ROOM.floor, ROOM.front, FACE.front)
+  const doorMat = std('#17172a', 0.7, 0.1)
+  add(rbox(DOOR.w - 0.06, DOOR.h, 0.05, 0.01), doorMat, 0, DOOR.h / 2, 0.03, door)
+  for (const y of [DOOR.h * 0.72, DOOR.h * 0.3]) add(rbox(DOOR.w - 0.42, DOOR.h * (y > 2 ? 0.36 : 0.44), 0.02, 0.01), std('#141426', 0.75, 0.1), 0, y, 0.06, door, false)
+  for (const [w, h, x, y] of [[DOOR.w + 0.16, 0.09, 0, DOOR.h + 0.045], [0.09, DOOR.h + 0.09, -(DOOR.w / 2 + 0.035), (DOOR.h + 0.09) / 2], [0.09, DOOR.h + 0.09, DOOR.w / 2 + 0.035, (DOOR.h + 0.09) / 2]])
+    add(new THREE.BoxGeometry(w, h, 0.08), frameMat, x, y, 0.04, door)
+  add(new THREE.SphereGeometry(0.045, 16, 12), trim, DOOR.w / 2 - 0.2, 1.75, 0.09, door) // handle at ~1 m
 
   // desk
   add(rbox(4.8, 0.08, 2.1, 0.02), deskMat, 0.25, -0.04, 0.3)
@@ -297,8 +307,8 @@ async function init() {
   add(new THREE.SphereGeometry(0.045, 24, 16), std('#e9e6df', 0.7, 0, { map: seamTexture() }), 0, 0.075, 0, baseball)
 
   plant(2.45, 0, -0.45, 0.5)
-  plant(3.95, ROOM.floor, -1.15, 1.5)
-  plant(-3.85, ROOM.floor, 5.6, 1.3)
+  plant(ROOM.r - 0.65, ROOM.floor, -1.15, 1.5)
+  plant(ROOM.l + 0.75, ROOM.floor, 5.6, 1.3)
 
   // ---------- back wall: shelf, posters, light switch ----------
   const shelf = group(-2.55, 0.85, ROOM.back + 0.14)
@@ -317,7 +327,7 @@ async function init() {
 
   const posters = []
   poster('back', -2.2, 1.85, 0.78, 1.09, canvasTex(600, 840, drawTripleOption), 'Triple Option')
-  poster('back', 0, 2.62, 1.1, 0.5, canvasTex(1100, 500, drawRetro), 'Press Start')
+  poster('back', 0, 2.64, 1.2, 0.55, canvasTex(1200, 550, drawFerrari), 'Scuderia Ferrari')
   poster('back', 2.2, 2.05, 1.0, 0.75, canvasTex(1000, 750, drawCamden), 'Camden Yards')
   poster('back', 3.6, 1.75, 0.62, 0.87, canvasTex(600, 840, drawContracts), 'Contracts')
   poster('left', 0.3, 2.3, 1.6, 0.56, canvasTex(1200, 420, drawHistory), 'History')
@@ -325,14 +335,15 @@ async function init() {
   poster('front', -2.2, 1.7, 0.8, 1.12, canvasTex(600, 840, drawFinalFour), '2024 Purdue Boilermakers')
   poster('front', -1.05, 1.7, 0.8, 1.12, canvasTex(600, 840, drawIndiana), 'National Champions')
   poster('front', 0.2, 1.85, 0.62, 0.87, canvasTex(600, 840, drawAperture), 'Exposure')
-  poster('front', -3.55, 1.8, 0.9, 1.2, canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h)), 'Big Ten',
+  // same centre line and height as the Purdue and Indiana posters
+  poster('front', -3.5, 1.7, 0.84, 1.12, canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h)), 'Big Ten',
     { glowTex: canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h, true)), glow: 0.75 })
   poster('right', 5.6, 1.75, 0.96, 1.28, canvasTex(900, 1200, drawSportsMgmt), 'Sports Management')
 
   // glowing team marks above the Purdue and Indiana posters
   const marks = [
-    teamMark(purdueShapes(), -2.2, '#CEB888', '#d9b96a', 0.62),
-    teamMark(iuShapes(), -1.05, '#990000', '#e0303a', 0.95),
+    teamMark(purdueShapes(), -2.2, '#CEB888', '#d9b96a', 0.62, TEAM_SVG.purdue),
+    teamMark(iuShapes(), -1.05, '#990000', '#e0303a', 0.95, TEAM_SVG.iu),
   ]
 
   // light switch (back wall, left of the shelf)
@@ -344,8 +355,8 @@ async function init() {
   add(new THREE.BoxGeometry(0.008, 0.008, 0.004), locator, 0, -0.055, 0.009, sw, false)
 
   // ---------- right wall: skate decks, cap ----------
-  skateDeck(0.15, 1.6, 0.12, canvasTex(256, 1024, drawDeckA))
-  skateDeck(0.75, 1.55, -0.1, canvasTex(256, 1024, drawDeckB))
+  skateDeck(0.05, 1.65, 0.1, canvasTex(256, 1024, drawDeckA))
+  skateDeck(0.95, 1.6, -0.08, canvasTex(256, 1024, drawDeckB))
   const capG = group(...onWall('right', 4.2, 1.7), FACE.right)
   add(new THREE.CylinderGeometry(0.012, 0.012, 0.08, 8), trim, 0, 0.12, 0.04, capG).rotation.x = Math.PI / 2
   const crown = add(new THREE.SphereGeometry(0.13, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), std('#1b1b3a', 0.85, 0), 0, 0.02, 0.1, capG)
@@ -361,6 +372,46 @@ async function init() {
   add(new THREE.TorusGeometry(RIM_R, 0.011, 10, 48), rimMat, 0, -0.24, 0.36, hoop).rotation.x = Math.PI / 2
   const net = add(new THREE.CylinderGeometry(RIM_R, 0.12, 0.28, 14, 3, true), new THREE.MeshBasicMaterial({ color: '#c0c8e0', wireframe: true, transparent: true, opacity: 0.35 }), 0, -0.38, 0.36, hoop, false)
   const RIM = new THREE.Vector3(HOOP_X, 1.95 - 0.24, ROOM.front - 0.36)
+
+  // seven-segment score ticker above the backboard (counts makes since the page loaded)
+  const tickC = document.createElement('canvas')
+  tickC.width = 384; tickC.height = 140
+  const tickTex = new THREE.CanvasTexture(tickC)
+  tickTex.colorSpace = THREE.SRGBColorSpace
+  const SEG = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg']
+  function drawTicker(n) {
+    const g = tickC.getContext('2d'), W = tickC.width, H = tickC.height
+    g.fillStyle = '#07060a'; g.fillRect(0, 0, W, H)
+    g.fillStyle = 'rgba(255,181,71,0.55)'
+    g.font = '600 15px "JetBrains Mono", monospace'; g.textAlign = 'left'
+    if ('letterSpacing' in g) g.letterSpacing = '4px'
+    g.fillText('BUCKETS', 18, 26)
+    if ('letterSpacing' in g) g.letterSpacing = '0px'
+    const digits = String(Math.min(n, 999)).padStart(3, '0')
+    const dw = 62, dh = 92, t = 11, gap = 22, x0 = W - 18 - 3 * dw - 2 * gap, y = 36
+    const rects = (x) => ({
+      a: [x + t, y, dw - 2 * t, t], b: [x + dw - t, y + t, t, dh / 2 - 1.5 * t], c: [x + dw - t, y + dh / 2 + 0.5 * t, t, dh / 2 - 1.5 * t],
+      d: [x + t, y + dh - t, dw - 2 * t, t], e: [x, y + dh / 2 + 0.5 * t, t, dh / 2 - 1.5 * t], f: [x, y + t, t, dh / 2 - 1.5 * t], g: [x + t, y + dh / 2 - t / 2, dw - 2 * t, t],
+    })
+    ;[...digits].forEach((d, i) => {
+      const r = rects(x0 + i * (dw + gap))
+      for (const k of 'abcdefg') {
+        const lit = SEG[+d].includes(k)
+        g.save()
+        g.fillStyle = lit ? '#ffb547' : 'rgba(255,181,71,0.07)'
+        if (lit) { g.shadowColor = '#ff8a1f'; g.shadowBlur = 16 }
+        g.fillRect(...r[k])
+        g.restore()
+      }
+    })
+    tickTex.needsUpdate = true
+  }
+  drawTicker(0)
+  const ticker = group(...onWall('front', HOOP_X, 2.6), FACE.front)
+  add(rbox(0.7, 0.29, 0.07, 0.014), frameMat, 0, 0, 0.035, ticker)
+  const tickMat = new THREE.MeshBasicMaterial({ map: tickTex, toneMapped: false })
+  add(new THREE.PlaneGeometry(0.64, 0.233), tickMat, 0, 0, 0.0705, ticker, false)
+  let tickBlink = 0
 
   // the ball: click to pick up, R (or tap) to shoot
   const ball = add(new THREE.SphereGeometry(BALL_R, 32, 20), std('#b85a26', 0.75, 0, { map: basketballTexture() }), HOOP_X - 0.35, ROOM.floor + BALL_R, ROOM.front - 1.0)
@@ -461,7 +512,7 @@ async function init() {
   const pressed = new Set()
   // floor-plan obstacles the walker slides around: boxes [x0, z0, x1, z1] and posts [x, z, r]
   const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, ROOM.front - 0.62, HOOP_X + 0.5, ROOM.front]]
-  const POSTS = [[3.95, -1.15, 0.45], [-3.85, 5.6, 0.42]]
+  const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42]]
   function collide(p) {
     const R = WALK.radius
     for (const [x0, z0, x1, z1] of SOLIDS) {
@@ -482,14 +533,19 @@ async function init() {
     p.z = THREE.MathUtils.clamp(p.z, ROOM.back + R, ROOM.front - R)
   }
 
+  const zoomPos = new THREE.Vector3(SCREEN_POS.x, SCREEN_POS.y, 1.45) // end of the boot dolly (z set by resize)
   function resize() {
     const w = stage.clientWidth || innerWidth, h = stage.clientHeight || innerHeight
     renderer.setSize(w, h)
     css.setSize(w, h)
     composer?.setSize(w, h)
     camera.aspect = w / h
-    camera.fov = camera.aspect < 0.85 ? 55 : 35
+    // fixed, comfortable field of view for walking (no zoom); the boot dolly keeps the screen framing it had
+    const tall = camera.aspect < 0.85
+    camera.fov = tall ? 64 : 50
     camera.updateProjectionMatrix()
+    const deg = THREE.MathUtils.degToRad
+    zoomPos.z = SCREEN_POS.z + 1.375 * Math.tan(deg((tall ? 55 : 35) / 2)) / Math.tan(deg(camera.fov / 2))
   }
   addEventListener('resize', resize)
   resize()
@@ -499,7 +555,7 @@ async function init() {
   const ndc = new THREE.Vector2()
   const pointers = new Map()
   const pickables = [computer, sw, ball, ...posters]
-  let drag = null, pinch = 0, hoverKind = null, hoverPoster = null
+  let drag = null, hoverKind = null, hoverPoster = null
   let on = false, booting = false, lightsOn = true
   let focusOn = false, focused = null, walked = false
   let msg = '', msgUntil = 0
@@ -522,62 +578,97 @@ async function init() {
     stage.classList.toggle('hot', !!hoverKind && !(hoverKind === 'computer' && on))
   }
 
-  stage.addEventListener('pointerdown', (e) => {
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    stage.setPointerCapture(e.pointerId)
-    if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, yaw: tgt.yaw, pitch: tgt.pitch, moved: false }
-    else { drag = null; pinch = pinchDist() }
-  })
-  stage.addEventListener('pointermove', (e) => {
-    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointers.size === 2 && pinch && !focusOn && !booting) {
-      const d = pinchDist()
-      me.push += (d - pinch) * 0.012 // spread to step forward, pinch to step back
-      pinch = d
-      return
-    }
-    if (drag) {
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y
-      if (Math.hypot(dx, dy) > 5) { drag.moved = true; stage.classList.add('dragging') }
-      if (drag.moved && !focusOn && !booting) {
-        // grab-and-turn: drag right to turn left, drag down to look up
-        tgt.yaw = drag.yaw + dx * 0.0042
-        tgt.pitch = THREE.MathUtils.clamp(drag.pitch - dy * 0.0034, ...WALK.pitch)
-      }
-      return
-    }
-    setHover(booting ? null : pick(e.clientX, e.clientY))
-  })
-  const release = (e) => {
-    const wasClick = drag && !drag.moved && pointers.size === 1
-    pointers.delete(e.pointerId)
-    if (pointers.size < 2) pinch = 0
-    drag = null
-    stage.classList.remove('dragging')
-    if (!wasClick || booting) return
-    const o = pick(e.clientX, e.clientY)
+  // mouse: one click captures the pointer, then moving the mouse looks around (Esc releases it).
+  // While captured, clicks act on whatever sits under the centre crosshair. Touch keeps drag-to-look.
+  const LOCKABLE = !COARSE && 'requestPointerLock' in stage
+  const SENS = 0.0019 // radians per pixel of mouse travel
+  const locked = () => document.pointerLockElement === stage
+  const lockLook = () => {
+    if (!LOCKABLE || aiming() || !roomLive()) return
+    try { stage.requestPointerLock()?.catch?.(() => {}) } catch { /* not allowed right now */ }
+  }
+  // fallback where capture is refused (some embedded browsers): the view still follows mouse
+  // movement over the room, and the cursor is hidden behind the crosshair
+  let freeLook = false
+  const aiming = () => locked() || freeLook
+  const setAimUI = () => {
+    const a = aiming()
+    stage.classList.toggle('locked', a)
+    crossEl.classList.toggle('show', a)
+    if (!a) { setHover(null); crossEl.classList.remove('hot'); if (focusOn) unfocus() }
+  }
+  const unlockLook = () => { freeLook = false; if (locked()) document.exitPointerLock(); else setAimUI() }
+  document.addEventListener('pointerlockchange', setAimUI)
+  document.addEventListener('pointerlockerror', () => { if (roomLive()) { freeLook = true; setAimUI() } })
+  const pickCenter = () => {
+    ray.setFromCamera(ndc.set(0, 0), camera)
+    let o = ray.intersectObjects(pickables, true)[0]?.object
+    while (o && !o.userData.kind) o = o.parent
+    return o || null
+  }
+  const act = (o, touch) => {
     const kind = o?.userData.kind
-    if (held && kind !== 'poster' && kind !== 'switch' && e.pointerType !== 'mouse') return shoot()
-    if (kind === 'poster') { if (held) drop(); return focusPoster(o) }
+    if (held && touch && kind !== 'poster' && kind !== 'switch') return shoot()
+    if (kind === 'poster' && !focusOn) { if (held) drop(); return focusPoster(o) }
     if (kind === 'switch') { lightsOn = !lightsOn; return }
     if (focusOn) return unfocus()
     if (kind === 'ball' && !held) return grab()
-    if (kind === 'computer' && !on && typeof window.boot === 'function') window.boot()
+    if (kind === 'computer' && !on && typeof window.boot === 'function') { unlockLook(); window.boot() }
+  }
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (booting) return
+    if (e.pointerType === 'mouse' && LOCKABLE) {
+      if (e.button !== 0) return
+      if (aiming()) return act(pickCenter(), false)
+      if (focusOn) return act(pick(e.clientX, e.clientY), false) // cursor is free while reading a poster
+      return lockLook() // first click only captures the mouse
+    }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    stage.setPointerCapture(e.pointerId)
+    drag = pointers.size === 1 ? { x: e.clientX, y: e.clientY, yaw: tgt.yaw, pitch: tgt.pitch, moved: false } : null
+  })
+  stage.addEventListener('pointermove', (e) => {
+    if (aiming() && e.pointerType === 'mouse') {
+      if (focusOn || booting) return
+      // clamp spikes some browsers report when the pointer is captured
+      const mx = THREE.MathUtils.clamp(e.movementX, -60, 60), my = THREE.MathUtils.clamp(e.movementY, -60, 60)
+      tgt.yaw -= mx * SENS
+      tgt.pitch = THREE.MathUtils.clamp(tgt.pitch + my * SENS, ...WALK.pitch)
+      return
+    }
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y
+      if (Math.hypot(dx, dy) > 6) { drag.moved = true; stage.classList.add('dragging') }
+      if (drag.moved && !focusOn) {
+        // touch: grab-and-turn, drag right to turn left
+        tgt.yaw = drag.yaw + dx * 0.0036
+        tgt.pitch = THREE.MathUtils.clamp(drag.pitch - dy * 0.003, ...WALK.pitch)
+      }
+      return
+    }
+    if (!LOCKABLE) setHover(booting ? null : pick(e.clientX, e.clientY))
+  })
+  const release = (e) => {
+    if (!pointers.has(e.pointerId)) return
+    const wasClick = drag && !drag.moved && pointers.size === 1
+    pointers.delete(e.pointerId)
+    drag = null
+    stage.classList.remove('dragging')
+    if (wasClick && !booting) act(pick(e.clientX, e.clientY), e.pointerType !== 'mouse')
   }
   stage.addEventListener('pointerup', release)
-  stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; pinch = 0; stage.classList.remove('dragging') })
-  stage.addEventListener('pointerleave', () => { if (!drag) setHover(null) })
-  stage.addEventListener('wheel', (e) => {
-    e.preventDefault()
-    if (booting) return
-    if (focusOn) { if (e.deltaY > 0) unfocus(); return }
-    me.push -= Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 120) * 0.0045 // wheel steps forward / back
-  }, { passive: false })
+  stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging') })
+  stage.addEventListener('pointerleave', () => { if (!drag && !aiming()) setHover(null) })
+  // the view's zoom is fixed: the wheel does nothing in the room
+  stage.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
   backEl.addEventListener('click', () => unfocus())
 
   // keyboard walking (layout-independent codes) + R to shoot
   const MOVE = { KeyW: 'KeyW', ArrowUp: 'KeyW', KeyS: 'KeyS', ArrowDown: 'KeyS', KeyA: 'KeyA', ArrowLeft: 'KeyA', KeyD: 'KeyD', ArrowRight: 'KeyD' }
   addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && freeLook) return unlockLook()
     if (e.key === 'Escape' && focusOn) return unfocus()
     if (!roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
     if (e.target instanceof Element && e.target.closest('input,textarea,select,[contenteditable]')) return
@@ -646,10 +737,6 @@ async function init() {
     }
     shot = { scored: false, t: 0 }
   }
-  function pinchDist() {
-    const [a, b] = [...pointers.values()]
-    return Math.hypot(a.x - b.x, a.y - b.y) || 1
-  }
 
   // ---------- poster focus ----------
   const focusPos = new THREE.Vector3(), focusLook = new THREE.Vector3()
@@ -700,7 +787,8 @@ async function init() {
   new MutationObserver(() => {
     if (bootEl.classList.contains('hidden')) {
       pressed.clear()
-      for (const el of [cueEl, backEl, keysEl, padEl]) el.classList.remove('show')
+      unlockLook()
+      for (const el of [cueEl, backEl, keysEl, padEl, crossEl]) el.classList.remove('show')
       setTimeout(() => {
         cancelAnimationFrame(raf)
         raf = 0
@@ -713,13 +801,12 @@ async function init() {
   let power = 0, cueAmt = 0, lightAmt = 1, focusDist = 5
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), dir = new THREE.Vector3()
   const walkPos = new THREE.Vector3(), walkLook = new THREE.Vector3()
-  const zoomPos = new THREE.Vector3(SCREEN_POS.x, SCREEN_POS.y, 1.45)
   const fwd = new THREE.Vector3(), toMon = new THREE.Vector3()
   const wish = new THREE.Vector3(), tmp = new THREE.Vector3(), axis = new THREE.Vector3()
   const HOLD = new THREE.Vector3(0.24, -0.23, -0.68) // where the held ball sits, in camera space
   const dummy = new THREE.Object3D()
   const smooth = (k) => k * k * (3 - 2 * k)
-  let shownText = null, glowAmt = 0
+  let shownText = null, glowAmt = 0, frameN = 0
 
   // solid boxes the ball bounces off: [minX, minY, minZ, maxX, maxY, maxZ]
   const BALL_BOXES = [
@@ -727,6 +814,7 @@ async function init() {
     [-1.03, 0, -0.7, 1.03, 1.85, 0.08], // monitor
     [1.27, 0, -0.85, 2.17, 1.45, 0.55], // tower
     [HOOP_X - 0.45, 1.65, ROOM.front - 0.065, HOOP_X + 0.45, 2.25, ROOM.front], // backboard
+    [HOOP_X - 0.35, 2.45, ROOM.front - 0.075, HOOP_X + 0.35, 2.75, ROOM.front], // ticker
   ]
   function ballStep(h) {
     const p = ball.position, r = BALL_R
@@ -774,6 +862,8 @@ async function init() {
     if (shot && !shot.scored && bv.y < 0 && prevY >= RIM.y && p.y < RIM.y && hd < RIM_R - 0.02) {
       shot.scored = true
       makes++
+      drawTicker(makes)
+      tickBlink = 1.2
       bv.x *= 0.35; bv.z *= 0.35; bv.y *= 0.6 // the net catches it
       burst()
       say(`${shot.rim ? 'Bucket!' : 'Swish!'}  ${makes} / ${shots}`, 2.6)
@@ -824,7 +914,8 @@ async function init() {
     outsideLeft.tick(t)
 
     // look
-    const s = 1 - Math.exp(-dt * 9)
+    // light smoothing: removes mouse jitter without feeling laggy
+    const s = 1 - Math.exp(-dt * (aiming() ? 22 : 12))
     cur.yaw += (tgt.yaw - cur.yaw) * s
     cur.pitch += (tgt.pitch - cur.pitch) * s
     const y = cur.yaw, p = cur.pitch
@@ -838,7 +929,6 @@ async function init() {
       wish.subVectors(WALK.home, me.p).setY(0)
       if (wish.length() > 0.02) wish.multiplyScalar(Math.min(4, wish.length() * 3) / wish.length())
       else wish.set(0, 0, 0)
-      me.push = 0
     } else {
       wish.set(-sy * iz + cy * ix, 0, -cy * iz - sy * ix)
       if (wish.lengthSq() > 0) {
@@ -846,21 +936,12 @@ async function init() {
         if (!walked) { walked = true; keysEl.classList.add('dim') }
       }
     }
-    me.v.lerp(wish, 1 - Math.exp(-dt * 10))
+    // gentle ease in / ease out (no head bob, no sudden starts or stops)
+    me.v.lerp(wish, 1 - Math.exp(-dt * 6))
     if (me.v.lengthSq() < 1e-8) me.v.set(0, 0, 0)
     me.p.addScaledVector(me.v, dt)
-    if (me.push) {
-      const step = me.push * (1 - Math.exp(-dt * 8))
-      me.push -= step
-      if (Math.abs(me.push) < 1e-3) me.push = 0
-      me.p.x -= sy * step
-      me.p.z -= cy * step
-    }
     collide(me.p)
-    const speed = Math.hypot(me.v.x, me.v.z)
-    me.bob += dt * speed * 3.4
-    const bob = REDUCE ? 0 : Math.sin(me.bob) * 0.014 * Math.min(1, speed / WALK.speed)
-    walkPos.set(me.p.x, WALK.eye + bob, me.p.z)
+    walkPos.set(me.p.x, WALK.eye, me.p.z)
     walkLook.copy(walkPos).addScaledVector(dir, -4)
 
     // poster focus blend
@@ -921,6 +1002,8 @@ async function init() {
     flash.scale.setScalar(0.3 + (1 - fl) * 1.4)
     rimMat.emissiveIntensity = fl * 2.4
     swish = Math.max(0, swish - dt * 1.6)
+    tickBlink = Math.max(0, tickBlink - dt)
+    tickMat.color.setScalar(tickBlink > 0 && Math.sin(tickBlink * 26) < 0 ? 0.35 : 1)
     net.scale.set(1 - swish * 0.12 * Math.sin(t * 30), 1 + swish * 0.3, 1 - swish * 0.12 * Math.sin(t * 30))
 
     // computer: soft glow as you walk up to the desk, cue when looking at it
@@ -935,7 +1018,14 @@ async function init() {
     cueAmt += (((aimed || hoverKind === 'computer' || (prox > 0.55 && aim > 0.55)) && !on ? 1 : 0) - cueAmt) * Math.min(1, dt * 4)
 
     // one line of guidance at a time: event > carrying the ball > computer
-    const text = on ? null : t < msgUntil ? msg : held ? (COARSE ? 'Tap anywhere to shoot' : 'Press R to shoot') : cueAmt > 0.5 ? 'Click the computer to enter' : null
+    // crosshair target while the mouse is captured; release the mouse once the boot starts
+    if (aiming()) {
+      if (booting || on) unlockLook()
+      else if (!focusOn && (frameN++ & 3) === 0) setHover(pickCenter())
+      crossEl.classList.toggle('hot', !!hoverKind && !focusOn)
+    }
+    const text = on ? null : t < msgUntil ? msg : held ? (COARSE ? 'Tap anywhere to shoot' : 'Press R to shoot')
+      : cueAmt > 0.5 ? 'Click the computer to enter' : LOCKABLE && !aiming() && !focusOn && !booting ? 'Click to look around' : null
     if (text && text !== shownText) cueText.textContent = text
     shownText = text
     cueEl.classList.toggle('show', !!text)
@@ -968,20 +1058,54 @@ async function init() {
 
   // extruded, emissive wall mark with a brand-coloured halo on the wall behind it
   // layers: [[shapes, depth], ...] — a deeper layer sits in front where layers overlap
-  function teamMark(layers, along, color, glowColor, base) {
+  // extruded, emissive wall mark with a brand-coloured halo on the wall behind it.
+  // layers: [[shapes, depth, colour?, glows?], ...] — a deeper layer sits in front where layers overlap.
+  // svgUrl: an official logo SVG; when set, its paths (and their colours) replace the built-in outline.
+  function teamMark(layers, along, color, glowColor, base, svgUrl = '') {
     const g = group(...onWall('front', along, 2.78), FACE.front)
     g.translateZ(0.012)
-    const mat = std(color, 0.35, 0.35, { emissive: new THREE.Color(glowColor), emissiveIntensity: base })
-    for (const [shapes, depth] of layers) {
+    const lit = [] // materials that glow
+    const body = group(0, 0, 0, 0, g)
+    for (const [shapes, depth, c = color, glows = true] of layers) {
+      const mat = std(c, 0.35, 0.35, glows ? { emissive: new THREE.Color(glowColor), emissiveIntensity: base } : {})
+      if (glows) lit.push(mat)
       const geo = new THREE.ExtrudeGeometry(shapes, { depth, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.01, bevelSegments: 2 })
-      add(geo, mat, 0, 0, 0.03, g).scale.setScalar(0.42)
+      add(geo, mat, 0, 0, 0.03, body).scale.setScalar(0.42)
+    }
+    if (svgUrl) {
+      Promise.all([import('three/addons/loaders/SVGLoader.js'), fetch(svgUrl).then((r) => (r.ok ? r.text() : Promise.reject(r.status)))])
+        .then(([{ SVGLoader }, text]) => {
+          const svg = new THREE.Group()
+          const box = new THREE.Box3(), tmpBox = new THREE.Box3()
+          for (const path of new SVGLoader().parse(text).paths) {
+            const shapes = SVGLoader.createShapes(path)
+            if (!shapes.length) continue
+            const c = path.color.clone()
+            const glows = c.r + c.g + c.b > 0.25 // dark outline parts stay matte
+            const mat = std(c, 0.35, 0.35, glows ? { emissive: c.clone(), emissiveIntensity: base } : {})
+            if (glows) lit.push(mat)
+            const geo = new THREE.ExtrudeGeometry(shapes, { depth: 1, bevelEnabled: false, curveSegments: 18 })
+            geo.computeBoundingBox()
+            box.union(tmpBox.copy(geo.boundingBox))
+            svg.add(new THREE.Mesh(geo, mat))
+          }
+          if (!svg.children.length) return
+          const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3())
+          const k = 0.48 / Math.max(size.y, size.x * 0.8)
+          svg.children.forEach((m) => { m.geometry.translate(-mid.x, -mid.y, 0); m.castShadow = true })
+          svg.scale.set(k, -k, 0.06) // SVG y runs down
+          svg.position.z = 0.03
+          g.remove(body)
+          g.add(svg)
+        })
+        .catch(() => {}) // keep the built-in outline
     }
     const haloMat = new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, radialGlow(glowColor)), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.4 })
     add(new THREE.PlaneGeometry(1.05, 0.9), haloMat, 0, 0, 0.004, g, false)
     return {
       tick(t, L) {
         const k = 0.9 + 0.1 * Math.sin(t * 1.3 + along)
-        mat.emissiveIntensity = (base + (1 - L) * 0.5) * k
+        for (const m of lit) m.emissiveIntensity = (base + (1 - L) * 0.5) * k
         haloMat.opacity = (0.28 + (1 - L) * 0.3) * k
       },
     }
@@ -991,7 +1115,7 @@ async function init() {
     const g = group(...onWall('right', along, y), FACE.right)
     g.translateZ(0.04)
     g.rotation.z = tilt
-    const w = 0.21, h = 0.8, r = w / 2
+    const w = 0.36, h = 1.4, r = w / 2 // full-size deck (8.25" × 32") at room scale
     const shape = new THREE.Shape()
     shape.moveTo(-r, -h / 2 + r)
     shape.absarc(0, -h / 2 + r, r, Math.PI, 0, false)
@@ -1002,7 +1126,7 @@ async function init() {
     tex.repeat.set(1 / w, 1 / h)
     tex.offset.set(0.5, 0.5)
     add(new THREE.ShapeGeometry(shape, 24), std('#ffffff', 0.7, 0, { map: tex, emissive: new THREE.Color('#fff'), emissiveMap: tex, emissiveIntensity: 0.08 }), 0, 0, 0.001, g, false)
-    for (const yy of [-0.24, 0.24]) add(new THREE.BoxGeometry(0.14, 0.04, 0.04), trim, 0, yy, -0.03, g)
+    for (const yy of [-0.42, 0.42]) add(new THREE.BoxGeometry(0.24, 0.06, 0.06), trim, 0, yy, -0.04, g)
   }
 
   function windowFrame(side) {
@@ -1209,20 +1333,28 @@ const arcPts = (cx, cy, r, a0, a1, n = 20) =>
 const rectPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
 const toShape = (pts, Cls = THREE.Shape) => new Cls(pts.map(([x, y]) => new THREE.Vector2(x, y)))
 
-// italic "motion" P with speed lines
+// italic, heavy-stem P: old-gold face on a black outline layer
 function purdueShapes() {
-  const sk = (pts) => pts.map(([x, y]) => [x + 0.22 * y + 0.14, y])
-  const outer = toShape(sk([[-0.34, -0.5], [-0.06, -0.5], [-0.06, -0.02], ...arcPts(0.12, 0.24, 0.26, -Math.PI / 2, Math.PI / 2), [-0.34, 0.5]]))
-  outer.holes.push(toShape(sk([[-0.06, 0.12], ...arcPts(0.1, 0.24, 0.12, -Math.PI / 2, Math.PI / 2), [-0.06, 0.36]]).reverse(), THREE.Path))
-  const lines = [rectPts(-0.7, 0.3, -0.42, 0.38), rectPts(-0.62, 0.15, -0.42, 0.23), rectPts(-0.54, 0, -0.42, 0.08)].map((p) => toShape(sk(p)))
-  return [[[outer, ...lines], 0.14]]
+  const P_OUT = [[-0.34, -0.5], [-0.06, -0.5], [-0.06, -0.04], ...arcPts(0.11, 0.23, 0.27, -Math.PI / 2, Math.PI / 2), [-0.34, 0.5]]
+  const P_IN = [[-0.06, 0.11], ...arcPts(0.09, 0.23, 0.12, -Math.PI / 2, Math.PI / 2), [-0.06, 0.35]]
+  const make = (grow, holeK) => {
+    const sk = (pts) => pts.map(([x, y]) => [(x + 0.22 * y) * grow + 0.04, y * grow])
+    const shape = toShape(sk(P_OUT))
+    const hole = P_IN.map(([x, y]) => [0.03 + (x - 0.03) * holeK, 0.23 + (y - 0.23) * holeK])
+    shape.holes.push(toShape(sk(hole).reverse(), THREE.Path))
+    return shape
+  }
+  return [[[make(1.1, 0.72)], 0.12, '#0b0b0b', false], [[make(1, 1)], 0.17]]
 }
 
-// interlocking I and U
+// interlocking I and U: squared U bowl with serifed arms, taller serifed I through the middle
 function iuShapes() {
-  const u = toShape([[-0.42, 0.4], ...arcPts(0, 0.02, 0.42, Math.PI, Math.PI * 2), [0.42, 0.4], [0.27, 0.4], ...arcPts(0, 0.02, 0.27, Math.PI * 2, Math.PI), [-0.27, 0.4]])
-  const uSerifs = [rectPts(-0.49, 0.38, -0.2, 0.46), rectPts(0.2, 0.38, 0.49, 0.46)].map((p) => toShape(p))
-  const i = [rectPts(-0.075, -0.56, 0.075, 0.56), rectPts(-0.17, 0.48, 0.17, 0.56), rectPts(-0.17, -0.56, 0.17, -0.48)].map((p) => toShape(p))
+  const u = toShape([
+    [-0.42, 0.4], [-0.42, -0.18], ...arcPts(-0.22, -0.18, 0.2, Math.PI, Math.PI * 1.5, 10), ...arcPts(0.22, -0.18, 0.2, Math.PI * 1.5, Math.PI * 2, 10),
+    [0.42, 0.4], [0.27, 0.4], [0.27, -0.13], ...arcPts(0.17, -0.13, 0.1, 0, -Math.PI / 2, 8), ...arcPts(-0.17, -0.13, 0.1, -Math.PI / 2, -Math.PI, 8), [-0.27, 0.4],
+  ])
+  const uSerifs = [rectPts(-0.5, 0.38, -0.19, 0.46), rectPts(0.19, 0.38, 0.5, 0.46)].map((p) => toShape(p))
+  const i = [rectPts(-0.075, -0.58, 0.075, 0.56), rectPts(-0.18, 0.48, 0.18, 0.56), rectPts(-0.18, -0.58, 0.18, -0.5)].map((p) => toShape(p))
   return [[[u, ...uSerifs], 0.14], [i, 0.17]]
 }
 
@@ -1500,27 +1632,48 @@ function star(g, x, y, r) {
   g.closePath(); g.fill()
 }
 
-function drawRetro(g, w, h) {
-  g.fillStyle = '#0b0b16'; g.fillRect(0, 0, w, h)
-  for (let y = 0; y < h; y += 4) { g.fillStyle = 'rgba(140,180,255,0.04)'; g.fillRect(0, y, w, 2) }
-  const px = 10
-  const heart = (x0, y0, color) => {
-    const m = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000']
-    g.fillStyle = color
-    m.forEach((row, r) => [...row].forEach((c, k) => { if (c === '1') g.fillRect(x0 + k * px, y0 + r * px, px, px) }))
+// Formula 1 side profile in Ferrari red, with a pit-board stripe and chequered corner
+function drawFerrari(g, w, h) {
+  posterBase(g, w, h, '#100a0c', 'rgba(220,0,0,0.12)')
+  const RED = '#DC0000', DARK = '#8f0000', G = 340
+  // speed streaks behind the car
+  for (let i = 0; i < 9; i++) {
+    g.fillStyle = `rgba(220,0,0,${0.06 + (i % 3) * 0.04})`
+    g.fillRect(40 + (i % 4) * 30, 170 + i * 18, 150 + (i * 37) % 120, 3)
   }
-  heart(60, 50, P.crimson); heart(140, 50, P.crimson); heart(220, 50, 'rgba(200,70,60,0.3)')
-  mono(g, 24, P.dim, '1UP  000420', w - 60, 80, 'right')
-  mono(g, 24, P.acc, 'HI  999990', w - 60, 116, 'right')
-  g.textAlign = 'center'
-  g.fillStyle = P.text
-  g.font = '800 112px "JetBrains Mono", monospace'
-  if ('letterSpacing' in g) g.letterSpacing = '8px'
-  g.fillText('PRESS START', w / 2, 300)
-  if ('letterSpacing' in g) g.letterSpacing = '0px'
-  mono(g, 22, P.muted, '© WALKER.OS ARCADE   ·   INSERT COIN', w / 2, 400)
-  g.fillStyle = P.acc
-  for (let i = 0; i < 3; i++) g.fillRect(w / 2 - 300 + i * 260, 340, 80, 8)
+  // chequered corner
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 0) { g.fillStyle = 'rgba(246,237,218,0.75)'; g.fillRect(w - 44 - (c + 1) * 16, 40 + r * 16, 16, 16) }
+  g.fillStyle = '#FFF200'; g.fillRect(44, 40, 130, 8)
+  // floor + body
+  g.fillStyle = '#1a1a1a'
+  g.fillRect(250, G - 40, 760, 16)
+  g.fillStyle = RED
+  g.beginPath()
+  g.moveTo(255, G - 40); g.lineTo(300, G - 78); g.lineTo(420, G - 108); g.lineTo(520, G - 152); g.lineTo(585, G - 152)
+  g.lineTo(600, G - 112); g.lineTo(700, G - 108); g.lineTo(760, G - 92); g.lineTo(930, G - 64); g.lineTo(1040, G - 50)
+  g.lineTo(1050, G - 40); g.closePath(); g.fill()
+  // sidepod shading + engine cover line
+  g.fillStyle = DARK
+  g.beginPath(); g.ellipse(560, G - 62, 150, 22, 0, 0, Math.PI * 2); g.fill()
+  g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2
+  g.beginPath(); g.moveTo(320, G - 80); g.lineTo(520, G - 140); g.stroke()
+  // airbox intake + halo + driver helmet
+  g.fillStyle = '#111'; g.fillRect(560, G - 150, 22, 18)
+  g.fillStyle = '#FFF200'; g.beginPath(); g.arc(640, G - 116, 16, Math.PI, 0); g.fill()
+  g.strokeStyle = '#151515'; g.lineWidth = 9; g.lineCap = 'round'
+  g.beginPath(); g.moveTo(600, G - 112); g.quadraticCurveTo(640, G - 150, 700, G - 110); g.stroke()
+  // rear wing + front wing
+  g.fillStyle = RED; g.fillRect(205, G - 175, 70, 14); g.fillStyle = '#151515'; g.fillRect(222, G - 165, 12, 100)
+  g.fillStyle = '#151515'; g.fillRect(990, G - 34, 95, 10); g.fillStyle = RED; g.fillRect(1060, G - 52, 26, 26)
+  // tyres
+  for (const x of [330, 925]) {
+    g.fillStyle = '#0a0a0a'; g.beginPath(); g.arc(x, G - 56, 58, 0, Math.PI * 2); g.fill()
+    g.strokeStyle = '#FFF200'; g.lineWidth = 3; g.beginPath(); g.arc(x, G - 56, 44, 0.3, 1.6); g.stroke()
+    g.fillStyle = '#2a2a2a'; g.beginPath(); g.arc(x, G - 56, 22, 0, Math.PI * 2); g.fill()
+  }
+  // ground shadow
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(250, G + 2, 800, 6)
+  posterTitle(g, w, h, 'SCUDERIA FERRARI', 'FORMULA 1 · MARANELLO · ROSSO CORSA', { color: P.text, accent: RED, size: 72 })
 }
 
 function drawAnalytics(g, w, h) {
@@ -1604,42 +1757,32 @@ function drawSportsMgmt(g, w, h) {
   posterTitle(g, w, h, 'SPORTS MANAGEMENT', 'ROSTER CONSTRUCTION · DEPTH CHART', { size: 60 })
 }
 
-// conference wall chart: every member as a glowing monogram badge in its primary colour.
-// glowOnly draws just the lit parts on black, used as the poster's emissive layer.
+// conference wall chart: each member's full name glowing in its primary colour
+// (darker brand colours use a lighter tint of the same hue so they read on a dark wall).
+// glowOnly draws just the lit text on black, used as the poster's emissive layer.
 const BIG_TEN = [
-  ['ILLINOIS', 'I', '#E84A27'], ['INDIANA', 'IU', '#D6142B'], ['IOWA', 'I', '#FFCD00'],
-  ['MARYLAND', 'M', '#E03A3E'], ['MICHIGAN', 'M', '#FFCB05'], ['MICHIGAN ST', 'S', '#2F8A62'],
-  ['MINNESOTA', 'M', '#B0223A'], ['NEBRASKA', 'N', '#E41C38'], ['NORTHWESTERN', 'N', '#7D55C7'],
-  ['OHIO STATE', 'O', '#D11A1A'], ['OREGON', 'O', '#2E9B5A'], ['PENN STATE', 'PS', '#3B6FD6'],
-  ['PURDUE', 'P', '#CEB888'], ['RUTGERS', 'R', '#CC0033'], ['UCLA', 'UCLA', '#2D68C4'],
-  ['USC', 'SC', '#C41E3A'], ['WASHINGTON', 'W', '#7A5CC7'], ['WISCONSIN', 'W', '#C5050C'],
+  ['University of Illinois Urbana-Champaign', '#E84A27'], ['Indiana University', '#D6142B'], ['University of Iowa', '#FFCD00'],
+  ['University of Maryland', '#E03A3E'], ['University of Michigan', '#FFCB05'], ['Michigan State University', '#2F8A62'],
+  ['University of Minnesota', '#B0223A'], ['University of Nebraska–Lincoln', '#E41C38'], ['Northwestern University', '#7D55C7'],
+  ['The Ohio State University', '#D11A1A'], ['University of Oregon', '#2E9B5A'], ['The Pennsylvania State University', '#3B6FD6'],
+  ['Purdue University', '#CEB888'], ['Rutgers, The State University of New Jersey', '#CC0033'], ['University of California, Los Angeles', '#2D68C4'],
+  ['University of Southern California', '#C41E3A'], ['University of Washington', '#7A5CC7'], ['University of Wisconsin–Madison', '#C5050C'],
 ]
 function drawBigTen(g, w, h, glowOnly = false) {
   if (glowOnly) { g.fillStyle = '#000'; g.fillRect(0, 0, w, h) } else posterBase(g, w, h, '#12121c', 'rgba(140,180,255,0.08)')
-  const R = 50
-  BIG_TEN.forEach(([name, mark, col], i) => {
-    const cx = 160 + (i % 3) * 290, cy = 118 + Math.floor(i / 3) * 150
+  g.textAlign = 'center'
+  BIG_TEN.forEach(([name, col], i) => {
+    const y = 92 + i * 52
+    let size = 31
+    g.font = `700 ${size}px Inter, sans-serif`
+    while (g.measureText(name).width > w - 110) g.font = `700 ${(size -= 1)}px Inter, sans-serif`
     g.save()
     g.shadowColor = col
-    g.shadowBlur = glowOnly ? 34 : 22
-    // badge ring
-    g.lineWidth = 5
-    g.strokeStyle = col
-    g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke()
-    if (!glowOnly) { g.fillStyle = 'rgba(10,10,18,0.9)'; g.fill() }
-    // monogram
-    const fs = mark.length > 2 ? 30 : mark.length > 1 ? 42 : 58
-    g.font = `900 ${fs}px "Arial Black", Inter, sans-serif`
-    g.textAlign = 'center'; g.textBaseline = 'middle'
+    g.shadowBlur = glowOnly ? 26 : 14
     g.fillStyle = col
-    g.fillText(mark, cx, cy + 2)
+    g.fillText(name, w / 2, y)
     g.restore()
-    if (!glowOnly) {
-      g.textBaseline = 'alphabetic'
-      mono(g, 15, P.dim, name, cx, cy + R + 30)
-    }
   })
-  g.textBaseline = 'alphabetic'
   if (!glowOnly) posterTitle(g, w, h, 'BIG TEN', 'CONFERENCE · 18 MEMBERS', { size: 72 })
 }
 

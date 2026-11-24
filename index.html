@@ -163,6 +163,12 @@
     .room-pad .shoot{position:absolute;left:calc(100vw - 132px);bottom:0;width:92px;height:48px;display:none;font-size:12px;letter-spacing:1px;text-transform:uppercase;
       background:rgba(var(--accent-rgb),.2)}
     .room-pad.holding .shoot{display:block}
+    #stage3d.locked{cursor:none}
+    .room-cross{position:absolute;left:50%;top:50%;z-index:3;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+      background:rgba(240,244,255,.85);box-shadow:0 0 0 1.5px rgba(5,5,10,.55);opacity:0;pointer-events:none;
+      transition:opacity .25s ease,transform .2s var(--ease),background .2s ease}
+    .room-cross.show{opacity:1}
+    .room-cross.hot{transform:scale(1.9);background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
     @media (max-width:520px){.room-keys{top:16px;left:16px;right:16px;text-align:center}}
     @media (pointer:coarse){.room-cue{bottom:142px}}
 
