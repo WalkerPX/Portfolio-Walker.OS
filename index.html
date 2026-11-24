@@ -130,6 +130,20 @@
     #boot.three-on .term{padding:26px 30px;font-size:14px;line-height:1.6}
     #boot.three-on .off-state .logo,#boot.three-on .off-state .logo img{width:110px;height:110px}
     #boot.three-on .off-state .wname{font-size:16px}
+    /* once the boot screen hides, nothing inside it may catch clicks meant for the desktop */
+    #boot.hidden,#boot.hidden *{pointer-events:none!important}
+    .room-cue{position:absolute;left:50%;bottom:32px;z-index:3;display:flex;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;
+      font:11px/1 var(--font-ui);letter-spacing:1.6px;text-transform:uppercase;color:var(--text-dim);
+      background:rgba(20,20,32,.55);border:1px solid var(--border);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      opacity:0;transform:translate(-50%,8px);transition:opacity .45s ease,transform .45s var(--ease);pointer-events:none}
+    .room-cue.show{opacity:1;transform:translate(-50%,0)}
+    .room-cue .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow);animation:pulse 1.8s ease-in-out infinite}
+    .room-back{position:absolute;top:20px;left:20px;z-index:3;padding:9px 15px;border-radius:999px;cursor:pointer;
+      font:12px/1 var(--font-ui);letter-spacing:.6px;color:var(--text);background:rgba(20,20,32,.6);border:1px solid var(--border-strong);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transform:translateY(-6px);pointer-events:none;
+      transition:opacity .35s ease,transform .35s var(--ease),background .2s ease}
+    .room-back.show{opacity:1;transform:none;pointer-events:auto}
+    .room-back:hover{background:rgba(var(--accent-rgb),.14)}
 
     /* ===== DESKTOP ===== */
     #desktop{position:fixed;inset:0;z-index:50;opacity:0;transition:opacity .6s ease}
