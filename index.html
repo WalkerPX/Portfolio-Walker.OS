@@ -13,6 +13,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+  </script>
 
   <style>
     /* ===== TOKENS — Dark Black + Icy Blue ===== */
@@ -115,6 +118,92 @@
     .term .cl{display:flex;align-items:center;color:var(--accent)}
     .term .cb{display:inline-block;width:8px;height:17px;background:var(--accent);margin-left:5px;animation:cb .7s step-end infinite}
     @keyframes cb{0%,100%{opacity:1}50%{opacity:0}}
+
+    /* ===== 3D BOOT SCENE (boot3d.js adds .three-on; without it the 2D monitor above is used) ===== */
+    #stage3d{position:absolute;inset:0;cursor:grab;touch-action:none;outline:none}
+    #stage3d.hot{cursor:pointer}
+    #stage3d.dragging{cursor:grabbing}
+    #stage3d>canvas,#stage3d>.css3d{position:absolute!important;inset:0;pointer-events:none}
+    #boot.three-on,#boot.three-pending{background:#07070d}
+    #boot.three-on .monitor,#boot.three-pending .monitor{display:none}
+    #boot.three-on .screen{width:800px;height:500px;aspect-ratio:auto;border-radius:6px;border:none;background:#0b0b1c}
+    #boot.three-on .term{padding:26px 30px;font-size:14px;line-height:1.6}
+    #boot.three-on .off-state .logo,#boot.three-on .off-state .logo img{width:110px;height:110px}
+    #boot.three-on .off-state .wname{font-size:16px}
+    /* once the boot screen hides, nothing inside it may catch clicks meant for the desktop */
+    #boot.hidden,#boot.hidden *{pointer-events:none!important}
+    .room-cue{position:absolute;left:50%;bottom:32px;z-index:3;display:flex;white-space:nowrap;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;
+      font:11px/1 var(--font-ui);letter-spacing:1.6px;text-transform:uppercase;color:var(--text-dim);
+      background:rgba(20,20,32,.55);border:1px solid var(--border);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      opacity:0;transform:translate(-50%,8px);transition:opacity .45s ease,transform .45s var(--ease);pointer-events:none}
+    .room-cue.show{opacity:1;transform:translate(-50%,0)}
+    .room-cue .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow);animation:pulse 1.8s ease-in-out infinite}
+    .room-back{position:absolute;top:20px;left:20px;z-index:3;padding:9px 15px;border-radius:999px;cursor:pointer;
+      font:12px/1 var(--font-ui);letter-spacing:.6px;color:var(--text);background:rgba(20,20,32,.6);border:1px solid var(--border-strong);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transform:translateY(-6px);pointer-events:none;
+      transition:opacity .35s ease,transform .35s var(--ease),background .2s ease}
+    .room-back.show{opacity:1;transform:none;pointer-events:auto}
+    .room-back:hover{background:rgba(var(--accent-rgb),.14)}
+    .room-keys{position:absolute;top:20px;right:20px;z-index:3;padding:8px 13px;border-radius:12px;max-width:calc(100% - 40px);
+      font:11px/1.7 var(--font-ui);letter-spacing:.4px;color:var(--text-dim);background:rgba(20,20,32,.5);border:1px solid var(--border);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transform:translateY(-6px);pointer-events:none;
+      transition:opacity .45s ease,transform .45s var(--ease)}
+    .room-keys.show{opacity:1;transform:none}
+    .room-keys.show.dim{opacity:.45}
+    .room-keys b{font-weight:600;color:var(--text)}
+    .room-keys kbd{display:inline-block;min-width:18px;margin:0 1px;padding:0 4px;border-radius:5px;text-align:center;
+      font:600 10px/16px var(--font-ui);color:var(--text);background:rgba(var(--accent-rgb),.12);border:1px solid var(--border-strong)}
+    .room-pad{position:absolute;left:20px;bottom:24px;z-index:3;display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px);gap:6px;
+      opacity:0;pointer-events:none;transition:opacity .35s ease;touch-action:none;user-select:none;-webkit-user-select:none}
+    .room-pad.show{opacity:1;pointer-events:auto}
+    .room-pad button{border-radius:12px;font:14px/1 var(--font-ui);color:var(--text);background:rgba(20,20,32,.6);border:1px solid var(--border-strong);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);touch-action:none}
+    .room-pad button:active{background:rgba(var(--accent-rgb),.22)}
+    .room-pad .u{grid-area:1/2}.room-pad .l{grid-area:2/1}.room-pad .d{grid-area:2/2}.room-pad .r{grid-area:2/3}
+    .room-pad .shoot{position:absolute;left:calc(100vw - 132px);bottom:0;width:92px;height:48px;display:none;font-size:12px;letter-spacing:1px;text-transform:uppercase;
+      background:rgba(var(--accent-rgb),.2)}
+    .room-pad.holding .shoot{display:block}
+    #stage3d.locked{cursor:none}
+    .room-cross{position:absolute;left:50%;top:50%;z-index:3;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+      background:rgba(240,244,255,.85);box-shadow:0 0 0 1.5px rgba(5,5,10,.55);opacity:0;pointer-events:none;
+      transition:opacity .25s ease,transform .2s var(--ease),background .2s ease}
+    .room-cross.show{opacity:1}
+    .room-cross.hot{transform:scale(1.9);background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+    /* basketball shot meter: fills while the shot is held, release in the green band */
+    .shot-meter{position:absolute;left:calc(50% + 38px);top:50%;z-index:3;width:14px;height:110px;margin-top:-55px;border-radius:8px;
+      background:rgba(12,12,22,.72);border:1px solid var(--border-strong);box-shadow:0 4px 18px rgba(0,0,0,.4);
+      opacity:0;transform:scale(.9);transition:opacity .18s ease,transform .18s var(--ease);pointer-events:none;overflow:hidden}
+    .shot-meter.show{opacity:1;transform:none}
+    .shot-meter .g{position:absolute;left:0;right:0;background:rgba(0,255,136,.28);border-top:1px solid #00ff88;border-bottom:1px solid #00ff88}
+    .shot-meter .f{position:absolute;left:3px;right:3px;bottom:3px;height:0;border-radius:5px;background:#f0f4ff}
+    .shot-meter.green .f{background:#00ff88;box-shadow:0 0 14px #00ff88}
+    .shot-meter.ok .f{background:#ffb547}
+    .shot-meter.miss .f{background:#c8463c}
+    /* home run derby */
+    #stage3d.derby{cursor:none}
+    .derby-hud{position:absolute;left:50%;top:20px;z-index:3;display:flex;gap:14px;align-items:center;padding:9px 16px;border-radius:999px;white-space:nowrap;
+      font:11px/1 var(--font-ui);letter-spacing:1.4px;text-transform:uppercase;color:var(--text-dim);background:rgba(20,20,32,.6);border:1px solid var(--border-strong);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transform:translate(-50%,-6px);transition:opacity .35s ease,transform .35s var(--ease);pointer-events:none}
+    .derby-hud.show{opacity:1;transform:translate(-50%,0)}
+    .derby-hud b{color:var(--text);font-weight:600}
+    .derby-hud .pt{color:#ffb547}
+    .derby-sum{position:absolute;left:50%;top:50%;z-index:4;width:min(360px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;padding:22px 22px 18px;border-radius:16px;
+      font:13px/1.5 var(--font-ui);color:var(--text);background:rgba(16,16,28,.86);border:1px solid var(--border-strong);box-shadow:0 20px 60px rgba(0,0,0,.55);
+      backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transform:translate(-50%,-46%);transition:opacity .35s ease,transform .35s var(--ease);pointer-events:none}
+    .derby-sum.show{opacity:1;transform:translate(-50%,-50%);pointer-events:auto}
+    .derby-sum h3{margin:0 0 2px;font:600 12px/1.4 var(--font-ui);letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)}
+    .derby-sum .big{font:700 30px/1.15 var(--font-ui);margin:0 0 12px}
+    .derby-sum ol{margin:0 0 14px;padding:0;list-style:none;border-top:1px solid var(--border)}
+    .derby-sum li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);color:var(--text-dim)}
+    .derby-sum li b{color:var(--text);font-weight:600}
+    .derby-sum li.hr b{color:#ffb547}
+    .derby-sum .row{display:flex;gap:8px}
+    .derby-sum button{flex:1;padding:10px 12px;border-radius:10px;cursor:pointer;font:600 12px/1 var(--font-ui);letter-spacing:.6px;color:var(--text);
+      background:rgba(var(--accent-rgb),.14);border:1px solid var(--border-strong)}
+    .derby-sum button:hover{background:rgba(var(--accent-rgb),.26)}
+    .derby-sum button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    @media (max-width:520px){.room-keys{top:16px;left:16px;right:16px;text-align:center}}
+    @media (pointer:coarse){.room-cue{bottom:142px}}
 
     /* ===== DESKTOP ===== */
     #desktop{position:fixed;inset:0;z-index:50;opacity:0;transition:opacity .6s ease}
@@ -634,6 +723,7 @@
                  height .58s var(--ease),border-radius .58s var(--ease),opacity .4s ease}
 
   </style>
+  <link rel="stylesheet" href="polish.css" />
 </head>
 <body>
 
@@ -643,6 +733,11 @@
 <!-- Glitch Flash -->
 <!-- ===== BOOT SCREEN ===== -->
 <div id="boot">
+<script>
+  // WebGL available: the 3D room will take over, so the 2D monitor must never paint underneath it.
+  // boot3d.js swaps three-pending for three-on, or removes it to fall back to the 2D monitor.
+  ;(function(){try{var c=document.createElement('canvas');if(c.getContext('webgl2')||c.getContext('webgl'))document.getElementById('boot').classList.add('three-pending')}catch(e){}})()
+</script>
   <div class="monitor" id="monitor">
     <div class="bezel">
       <div class="screen" id="screen">
@@ -991,10 +1086,21 @@
 
   // ===== BOOT =====
   const LINES=[
+    // POST screen
     {t:'',c:''},
-    {t:'  Walker.OS v3.0.1 — 64-bit Kernel (x86_64)',c:'ac'},
+    {t:'  Walker Systems BIOS v3.0.1  (C) 2003-2026',c:'ac'},
     {t:'  BIOS: C.Virginia (Build 12-04-2003)',c:'dim'},
     {t:'  CPU: Intel Core i7-13700H @ 2.40GHz',c:'dim'},
+    {t:'  Memory Test: ',c:'dim',mem:16777216},
+    {t:'',c:''},
+    {t:'  Detecting NVMe0 ............ WOS-SSD 1TB',c:'dim'},
+    {t:'  Detecting USB .............. 1 Keyboard, 1 Mouse',c:'dim'},
+    {t:'  Verifying DMI Pool Data .... OK',c:'ok'},
+    {t:'  Booting from NVMe0...',c:'ac'},
+    {clear:true},
+    // Kernel
+    {t:'',c:''},
+    {t:'  Walker.OS v3.0.1 — 64-bit Kernel (x86_64)',c:'ac'},
     {t:'  RAM: 16384MB (DDR5-4800)',c:'dim'},
     {t:'',c:''},
     {t:'  [BOOT] Loading system modules...',c:'ac'},
@@ -1021,8 +1127,21 @@
     {t:'  [LAUNCH] Starting user interface...',c:'ac'}
   ]
 
+  // Returning visitors (back from the gallery or a deep link) get a short resume sequence
+  const QUICK_LINES=[
+    {t:'',c:''},
+    {t:'  Walker.OS v3.0.1 — resuming from standby',c:'ac'},
+    {t:'',c:''},
+    {t:'  [  OK  ]  session.restore       ',c:'ok'},
+    {t:'  [  OK  ]  display.manager       ',c:'ok'},
+    {t:'',c:''},
+    {t:'  [LAUNCH] Returning to your desktop...',c:'ac'}
+  ]
+  function hasDeepLink(){try{return !!MODE_LABELS[new URLSearchParams(location.search).get('mode')]}catch(e){return false}}
+
   function boot(){
     if(S.bi>0)return
+    if(S.resume||hasDeepLink())LINES.splice(0,LINES.length,...QUICK_LINES)
     const s=document.getElementById('screen'),os=document.getElementById('offState'),t=document.getElementById('term'),l=document.getElementById('led'),cl=document.getElementById('cl')
     cl.style.display='none'
     s.classList.add('warm');l.classList.add('on')
@@ -1033,17 +1152,35 @@
   function typeBoot(){
     const c=document.getElementById('bootLines'),cl=document.getElementById('cl')
     if(S.bi<LINES.length){
-      const ln=LINES[S.bi],d=document.createElement('div')
+      const ln=LINES[S.bi]
+      // POST → kernel: pause, then clear the screen
+      if(ln.clear){S.bi++;setTimeout(()=>{c.innerHTML='';setTimeout(typeBoot,180)},450);return}
+      const d=document.createElement('div')
       d.className='l'
+      // Memory test: count up, then OK
+      if(ln.mem){
+        const sp=document.createElement('span');sp.className=ln.c||'dim';d.appendChild(sp)
+        c.appendChild(d);d.classList.add('in');S.bi++
+        const t0=performance.now()
+        ;(function step(now){
+          const k=Math.min(1,(now-t0)/900)
+          sp.textContent=ln.t+Math.floor(ln.mem*k)+'K'+(k===1?'  OK':'')
+          if(k<1)requestAnimationFrame(step);else setTimeout(typeBoot,140)
+        })(t0)
+        return
+      }
       if(ln.c){const sp=document.createElement('span');sp.className=ln.c;sp.textContent=ln.t;d.appendChild(sp)}
       else if(ln.t)d.textContent=ln.t
       c.appendChild(d)
+      c.parentElement.scrollTop=c.parentElement.scrollHeight // console scrolls like a real one
       requestAnimationFrame(()=>requestAnimationFrame(()=>d.classList.add('in')))
       S.bi++
       const dl=ln.t.length>50?25:ln.t===''?40:15+Math.random()*18
       setTimeout(typeBoot,dl)
     }else{
       cl.style.display='flex'
+      c.parentElement.scrollTop=c.parentElement.scrollHeight
+      if(window.WOS3D)WOS3D.zoom() // 3D: dolly the camera into the monitor
       setTimeout(()=>{
         document.getElementById('boot').classList.add('hidden')
         setTimeout(()=>{
@@ -1051,15 +1188,17 @@
           S.booted=true
           document.addEventListener('keydown',kbd)
           // Two workspaces: let the visitor pick instead of auto-opening About
-          if(!launchFromURL())showModePicker()
+          if(S.resume){const r=S.resume;S.resume=null;resumeSession(r)}
+          else if(!launchFromURL())showModePicker()
         },300)
-      },600)
+      },window.WOS3D?1000:600)
     }
   }
 
-  // Click monitor / any key
+  // Boot only on a deliberate click on the computer (or Enter). Space is never a boot key:
+  // in the 3D room it jumps.
   document.getElementById('monitor').addEventListener('click',boot)
-  document.addEventListener('keydown',e=>{if(S.bi===0&&!document.getElementById('boot').classList.contains('hidden'))boot()})
+  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat&&S.bi===0&&!document.getElementById('boot').classList.contains('hidden')&&!(e.target instanceof Element&&e.target.closest('button,a,input,textarea,select'))&&!(window.WOS3D&&WOS3D.busy&&WOS3D.busy())){e.preventDefault();boot()}})
 
   // ===== TASKBAR TOOLTIP =====
   const TIP_NAMES={about:'About',work:'Professional Work',projects:'Professional Projects',gallery:'Creative Work',contact:'Contact',links:'Links'}
@@ -1690,17 +1829,10 @@
     window.location.href='gallery.html'
   }
 
-  // ===== SESSION RESTORE (return from gallery — skip boot) =====
-  ;(function(){
-    const saved=sessionStorage.getItem('wos_wins')
-    if(!saved)return
-    sessionStorage.removeItem('wos_wins')
-    const wins=JSON.parse(saved)
-    const mxed=JSON.parse(sessionStorage.getItem('wos_mx')||'[]')
-    sessionStorage.removeItem('wos_mx')
-    // Skip boot, show desktop immediately
-    document.getElementById('boot').classList.add('hidden')
-    document.getElementById('desktop').classList.add('in')
+  // ===== SESSION RESTORE (return from gallery) =====
+  // With the 3D room available, the visitor lands back in the room and the computer
+  // resumes this session on click (short boot). Without WebGL the desktop shows at once.
+  function resumeSession({wins,mxed}){
     let savedMode='creative'
     try{savedMode=localStorage.getItem('wos_mode')||'creative'}catch(e){}
     applyMode(savedMode)
@@ -1708,9 +1840,6 @@
     if(swEl)swEl.classList.add('show')
     // keep the instance's session so a later swap restores these windows
     SESSION[savedMode]={wins:wins.filter(n=>n!=='preview'),mx:mxed.slice()}
-    S.booted=true
-    S.bi=LINES.length
-    document.addEventListener('keydown',kbd)
     // Restore windows
     wins.forEach((n,i)=>setTimeout(()=>{
       toggleWin(n)
@@ -1730,7 +1859,31 @@
       }
     },i*120))
     setTimeout(()=>updateMxTabs(),wins.length*150+500)
+  }
+  ;(function(){
+    const saved=sessionStorage.getItem('wos_wins')
+    if(!saved)return
+    sessionStorage.removeItem('wos_wins')
+    let r
+    try{r={wins:JSON.parse(saved),mxed:JSON.parse(sessionStorage.getItem('wos_mx')||'[]')}}catch(e){r={wins:[],mxed:[]}}
+    sessionStorage.removeItem('wos_mx')
+    if(document.getElementById('boot').classList.contains('three-pending')){
+      S.resume=r
+      window.WOS_RESUME=true
+      return
+    }
+    document.getElementById('boot').classList.add('hidden')
+    document.getElementById('desktop').classList.add('in')
+    S.booted=true
+    S.bi=LINES.length
+    document.addEventListener('keydown',kbd)
+    resumeSession(r)
   })()
+
+  // 3D room never arrived (blocked CDN, slow network): show the 2D monitor instead of an empty room
+  function fallback2D(){const b=document.getElementById('boot');if(!b.classList.contains('three-on'))b.classList.remove('three-pending')}
+  setTimeout(fallback2D,12000)
 </script>
+<script type="module" src="boot3d.js" onerror="fallback2D()"></script>
 </body>
 </html>
