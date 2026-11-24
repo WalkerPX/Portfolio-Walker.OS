@@ -132,7 +132,7 @@
     #boot.three-on .off-state .wname{font-size:16px}
     /* once the boot screen hides, nothing inside it may catch clicks meant for the desktop */
     #boot.hidden,#boot.hidden *{pointer-events:none!important}
-    .room-cue{position:absolute;left:50%;bottom:32px;z-index:3;display:flex;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;
+    .room-cue{position:absolute;left:50%;bottom:32px;z-index:3;display:flex;white-space:nowrap;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;
       font:11px/1 var(--font-ui);letter-spacing:1.6px;text-transform:uppercase;color:var(--text-dim);
       background:rgba(20,20,32,.55);border:1px solid var(--border);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
       opacity:0;transform:translate(-50%,8px);transition:opacity .45s ease,transform .45s var(--ease);pointer-events:none}
@@ -144,6 +144,27 @@
       transition:opacity .35s ease,transform .35s var(--ease),background .2s ease}
     .room-back.show{opacity:1;transform:none;pointer-events:auto}
     .room-back:hover{background:rgba(var(--accent-rgb),.14)}
+    .room-keys{position:absolute;top:20px;right:20px;z-index:3;padding:8px 13px;border-radius:12px;max-width:calc(100% - 40px);
+      font:11px/1.7 var(--font-ui);letter-spacing:.4px;color:var(--text-dim);background:rgba(20,20,32,.5);border:1px solid var(--border);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transform:translateY(-6px);pointer-events:none;
+      transition:opacity .45s ease,transform .45s var(--ease)}
+    .room-keys.show{opacity:1;transform:none}
+    .room-keys.show.dim{opacity:.45}
+    .room-keys b{font-weight:600;color:var(--text)}
+    .room-keys kbd{display:inline-block;min-width:18px;margin:0 1px;padding:0 4px;border-radius:5px;text-align:center;
+      font:600 10px/16px var(--font-ui);color:var(--text);background:rgba(var(--accent-rgb),.12);border:1px solid var(--border-strong)}
+    .room-pad{position:absolute;left:20px;bottom:24px;z-index:3;display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px);gap:6px;
+      opacity:0;pointer-events:none;transition:opacity .35s ease;touch-action:none;user-select:none;-webkit-user-select:none}
+    .room-pad.show{opacity:1;pointer-events:auto}
+    .room-pad button{border-radius:12px;font:14px/1 var(--font-ui);color:var(--text);background:rgba(20,20,32,.6);border:1px solid var(--border-strong);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);touch-action:none}
+    .room-pad button:active{background:rgba(var(--accent-rgb),.22)}
+    .room-pad .u{grid-area:1/2}.room-pad .l{grid-area:2/1}.room-pad .d{grid-area:2/2}.room-pad .r{grid-area:2/3}
+    .room-pad .shoot{position:absolute;left:calc(100vw - 132px);bottom:0;width:92px;height:48px;display:none;font-size:12px;letter-spacing:1px;text-transform:uppercase;
+      background:rgba(var(--accent-rgb),.2)}
+    .room-pad.holding .shoot{display:block}
+    @media (max-width:520px){.room-keys{top:16px;left:16px;right:16px;text-align:center}}
+    @media (pointer:coarse){.room-cue{bottom:142px}}
 
     /* ===== DESKTOP ===== */
     #desktop{position:fixed;inset:0;z-index:50;opacity:0;transition:opacity .6s ease}

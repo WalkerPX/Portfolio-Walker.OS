@@ -25,11 +25,13 @@ const SCREEN_PX = { w: 800, h: 500 }
 const SCREEN_W = 1.76
 const SCREEN_POS = new THREE.Vector3(0, 1.17, 0.075)
 
-const ROOM = { l: -4.2, r: 4.6, back: -1.6, front: 6.0, floor: -1.15, ceil: 3.6 }
+const ROOM = { l: -4.6, r: 5.0, back: -1.6, front: 7.6, floor: -1.15, ceil: 3.6 }
 const ROOM_W = ROOM.r - ROOM.l, ROOM_D = ROOM.front - ROOM.back, ROOM_H = ROOM.ceil - ROOM.floor
 const MID = { x: (ROOM.l + ROOM.r) / 2, z: (ROOM.back + ROOM.front) / 2, y: (ROOM.floor + ROOM.ceil) / 2 }
-const C = new THREE.Vector3(0.2, 1.45, 2.2) // orbit centre
-const ORBIT = { rMin: 0.4, rMax: 3.2, r0: 3.1, yaw0: 0.22, pitch0: 0.1, pitch: [-0.3, 0.55] }
+const C = new THREE.Vector3(0.2, 1.45, 2.2) // ceiling fixture
+// first-person walker: eye height, speeds (units/s), body radius, start pose, look limits
+const WALK = { eye: 1.7, speed: 2.4, run: 4.2, radius: 0.32, home: new THREE.Vector3(0.87, 1.7, 5.2), yaw0: 0.22, pitch0: 0.1, pitch: [-0.75, 0.95] }
+const HOOP_X = 1.45, RIM_R = 0.18, BALL_R = 0.09, GRAV = 12
 const WIN = { z: 2.6, y: 1.35, w: 1.8, h: 1.5 }
 
 function hasWebGL() {
@@ -51,17 +53,30 @@ async function init() {
   // ---------- renderers + overlay UI ----------
   const stage = document.createElement('div')
   stage.id = 'stage3d'
-  stage.setAttribute('aria-label', 'Walker.OS room. Click the computer to boot.')
+  stage.setAttribute('aria-label', 'Walker.OS room. Walk with W A S D or the arrow keys, drag to look, click the computer to boot.')
   bootEl.prepend(stage)
 
+  const COARSE = matchMedia('(pointer: coarse)').matches
   const cueEl = document.createElement('div')
   cueEl.className = 'room-cue'
-  cueEl.innerHTML = '<span class="dot"></span>Click the computer to enter'
+  cueEl.setAttribute('aria-live', 'polite')
+  cueEl.innerHTML = '<span class="dot"></span><span class="t">Click the computer to enter</span>'
+  const cueText = cueEl.querySelector('.t')
   const backEl = document.createElement('button')
   backEl.type = 'button'
   backEl.className = 'room-back'
   backEl.textContent = '← Back to room'
-  bootEl.append(cueEl, backEl)
+  const keysEl = document.createElement('div')
+  keysEl.className = 'room-keys'
+  keysEl.innerHTML = COARSE
+    ? '<b>Pad</b> walk · <b>Drag</b> look · <b>Tap</b> ball to grab'
+    : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · <b>Drag</b> look · <b>Click</b> ball, <kbd>R</kbd> shoot'
+  const padEl = document.createElement('div')
+  padEl.className = 'room-pad'
+  padEl.innerHTML = [['KeyW', '▲', 'u'], ['KeyA', '◀', 'l'], ['KeyS', '▼', 'd'], ['KeyD', '▶', 'r']]
+    .map(([k, s, c]) => `<button type="button" class="${c}" data-k="${k}" aria-label="Walk ${{ u: 'forward', d: 'back', l: 'left', r: 'right' }[c]}">${s}</button>`).join('') +
+    '<button type="button" class="shoot" data-k="shoot">Shoot</button>'
+  bootEl.append(cueEl, backEl, keysEl, padEl)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -277,9 +292,9 @@ async function init() {
   }
 
   // baseball on a stand
-  const ball = group(-0.85, 0, -0.45)
-  add(new THREE.CylinderGeometry(0.035, 0.045, 0.03, 20), trim, 0, 0.015, 0, ball)
-  add(new THREE.SphereGeometry(0.045, 24, 16), std('#e9e6df', 0.7, 0, { map: seamTexture() }), 0, 0.075, 0, ball)
+  const baseball = group(-0.85, 0, -0.45)
+  add(new THREE.CylinderGeometry(0.035, 0.045, 0.03, 20), trim, 0, 0.015, 0, baseball)
+  add(new THREE.SphereGeometry(0.045, 24, 16), std('#e9e6df', 0.7, 0, { map: seamTexture() }), 0, 0.075, 0, baseball)
 
   plant(2.45, 0, -0.45, 0.5)
   plant(3.95, ROOM.floor, -1.15, 1.5)
@@ -307,10 +322,18 @@ async function init() {
   poster('back', 3.6, 1.75, 0.62, 0.87, canvasTex(600, 840, drawContracts), 'Contracts')
   poster('left', 0.3, 2.3, 1.6, 0.56, canvasTex(1200, 420, drawHistory), 'History')
   poster('left', 4.7, 1.6, 0.7, 0.98, canvasTex(600, 840, drawAnalytics), 'Analytics')
-  poster('front', -2.2, 1.7, 0.8, 1.12, canvasTex(600, 840, drawFinalFour), 'Final Four 2024')
+  poster('front', -2.2, 1.7, 0.8, 1.12, canvasTex(600, 840, drawFinalFour), '2024 Purdue Boilermakers')
   poster('front', -1.05, 1.7, 0.8, 1.12, canvasTex(600, 840, drawIndiana), 'National Champions')
   poster('front', 0.2, 1.85, 0.62, 0.87, canvasTex(600, 840, drawAperture), 'Exposure')
-  poster('right', 5.0, 1.65, 0.62, 0.87, canvasTex(600, 840, drawFrontOffice), 'Front Office')
+  poster('front', -3.55, 1.8, 0.9, 1.2, canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h)), 'Big Ten',
+    { glowTex: canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h, true)), glow: 0.75 })
+  poster('right', 5.6, 1.75, 0.96, 1.28, canvasTex(900, 1200, drawSportsMgmt), 'Sports Management')
+
+  // glowing team marks above the Purdue and Indiana posters
+  const marks = [
+    teamMark(purdueShapes(), -2.2, '#CEB888', '#d9b96a', 0.62),
+    teamMark(iuShapes(), -1.05, '#990000', '#e0303a', 0.95),
+  ]
 
   // light switch (back wall, left of the shelf)
   const sw = group(-3.0, 1.3, ROOM.back + 0.008)
@@ -331,12 +354,49 @@ async function init() {
   brim.rotation.x = -0.15
 
   // ---------- front wall: mini hoop + ball ----------
-  const hoop = group(...onWall('front', 1.45, 1.95), FACE.front)
+  const hoop = group(...onWall('front', HOOP_X, 1.95), FACE.front)
   add(rbox(0.9, 0.6, 0.03, 0.01), std('#1f1f38', 0.5, 0.1, { map: canvasTex(450, 300, drawBackboard) }), 0, 0, 0.05, hoop)
   add(new THREE.BoxGeometry(0.04, 0.04, 0.2), trim, 0, -0.22, 0.13, hoop)
-  add(new THREE.TorusGeometry(0.16, 0.01, 10, 40), std('#c4622d', 0.5, 0.4), 0, -0.24, 0.38, hoop).rotation.x = Math.PI / 2
-  add(new THREE.CylinderGeometry(0.16, 0.11, 0.26, 14, 3, true), new THREE.MeshBasicMaterial({ color: '#c0c8e0', wireframe: true, transparent: true, opacity: 0.35 }), 0, -0.37, 0.38, hoop, false)
-  add(new THREE.SphereGeometry(0.12, 32, 20), std('#b85a26', 0.75, 0, { map: basketballTexture() }), 1.2, ROOM.floor + 0.12, 5.45)
+  const rimMat = std('#c4622d', 0.5, 0.4, { emissive: new THREE.Color('#ff7a2e'), emissiveIntensity: 0 })
+  add(new THREE.TorusGeometry(RIM_R, 0.011, 10, 48), rimMat, 0, -0.24, 0.36, hoop).rotation.x = Math.PI / 2
+  const net = add(new THREE.CylinderGeometry(RIM_R, 0.12, 0.28, 14, 3, true), new THREE.MeshBasicMaterial({ color: '#c0c8e0', wireframe: true, transparent: true, opacity: 0.35 }), 0, -0.38, 0.36, hoop, false)
+  const RIM = new THREE.Vector3(HOOP_X, 1.95 - 0.24, ROOM.front - 0.36)
+
+  // the ball: click to pick up, R (or tap) to shoot
+  const ball = add(new THREE.SphereGeometry(BALL_R, 32, 20), std('#b85a26', 0.75, 0, { map: basketballTexture() }), HOOP_X - 0.35, ROOM.floor + BALL_R, ROOM.front - 1.0)
+  ball.userData.kind = 'ball'
+  const bv = new THREE.Vector3() // velocity
+  let held = false, shot = null, makes = 0, shots = 0, swish = 0
+
+  // confetti burst (one instanced mesh, recycled) + a soft flash at the rim
+  const CONF_N = 220
+  const confetti = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.034, 0.02), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false }), CONF_N)
+  confetti.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+  confetti.frustumCulled = false
+  confetti.visible = false
+  const confCols = [P.acc, P.gold, P.crimson, P.cream, '#00ff88', P.acc2].map((c) => new THREE.Color(c))
+  const bits = Array.from({ length: CONF_N }, (_, i) => {
+    confetti.setColorAt(i, confCols[i % confCols.length])
+    return { p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), life: 0, ph: Math.random() * 6.3 }
+  })
+  scene.add(confetti)
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(128, 128, radialGlow('rgba(255,214,140,1)')), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }))
+  flash.position.copy(RIM)
+  scene.add(flash)
+  let flashT = 9
+  function burst() {
+    for (const q of bits) {
+      const a = Math.random() * Math.PI * 2, s = 0.5 + Math.random() * 1.7
+      q.p.copy(RIM).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, -0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.2))
+      q.v.set(Math.cos(a) * s, 2 + Math.random() * 2.8, Math.sin(a) * s - 1.1) // fan out toward the room
+      q.r.set(Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3)
+      q.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(16)
+      q.life = 2.4 + Math.random() * 1.6
+    }
+    confetti.visible = true
+    flashT = 0
+    swish = 1
+  }
 
   // ---------- windows + the scenes outside ----------
   windowFrame('left')
@@ -361,6 +421,13 @@ async function init() {
   const fill = new THREE.PointLight('#a9bbff', 24, 11, 1.6) // ceiling fixture: lights all four walls
   fill.position.set(C.x, ROOM.ceil - 0.35, C.z)
   scene.add(fill)
+  // second fixture over the front half of the room (hoop, team wall)
+  const FRONT_LIGHT = new THREE.Vector3(0.2, ROOM.ceil - 0.35, 5.7)
+  add(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 48), ceilMat, FRONT_LIGHT.x, ROOM.ceil - 0.02, FRONT_LIGHT.z, scene, false)
+  add(new THREE.CylinderGeometry(0.37, 0.37, 0.02, 48), trim, FRONT_LIGHT.x, ROOM.ceil - 0.005, FRONT_LIGHT.z, scene, false)
+  const fill2 = new THREE.PointLight('#a9bbff', 20, 8, 1.6)
+  fill2.position.copy(FRONT_LIGHT)
+  scene.add(fill2)
   const moon = new THREE.DirectionalLight('#6B9FFF', 0.35)
   moon.position.set(8, 3, 2.6)
   scene.add(moon)
@@ -387,14 +454,32 @@ async function init() {
   bootEl.classList.add('three-on')
 
   // ---------- camera rig ----------
-  const cur = { yaw: ORBIT.yaw0, pitch: ORBIT.pitch0, r: ORBIT.r0 }
+  // yaw/pitch: forward = -(sin yaw · cos pitch, sin pitch, cos yaw · cos pitch)
+  const cur = { yaw: WALK.yaw0, pitch: WALK.pitch0 }
   const tgt = { ...cur }
-  const rMaxAt = (yaw) => {
-    const sx = Math.sin(yaw), cz = Math.cos(yaw)
-    let m = ORBIT.rMax
-    if (Math.abs(sx) > 1e-3) m = Math.min(m, (sx > 0 ? ROOM.r - 0.45 - C.x : C.x - ROOM.l - 0.45) / Math.abs(sx))
-    if (Math.abs(cz) > 1e-3) m = Math.min(m, (cz > 0 ? ROOM.front - 0.4 - C.z : C.z - 1.55) / Math.abs(cz))
-    return Math.max(ORBIT.rMin, m)
+  const me = { p: WALK.home.clone(), v: new THREE.Vector3(), push: 0, bob: 0 }
+  const pressed = new Set()
+  // floor-plan obstacles the walker slides around: boxes [x0, z0, x1, z1] and posts [x, z, r]
+  const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, ROOM.front - 0.62, HOOP_X + 0.5, ROOM.front]]
+  const POSTS = [[3.95, -1.15, 0.45], [-3.85, 5.6, 0.42]]
+  function collide(p) {
+    const R = WALK.radius
+    for (const [x0, z0, x1, z1] of SOLIDS) {
+      const cx = THREE.MathUtils.clamp(p.x, x0, x1), cz = THREE.MathUtils.clamp(p.z, z0, z1)
+      const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz)
+      if (d >= R) continue
+      if (d > 1e-6) { p.x = cx + (dx / d) * R; p.z = cz + (dz / d) * R; continue }
+      // centre inside the box: leave by the nearest side
+      const opts = [[p.x - x0, -1, 0], [x1 - p.x, 1, 0], [p.z - z0, 0, -1], [z1 - p.z, 0, 1]].sort((a, b) => a[0] - b[0])[0]
+      if (opts[1]) p.x = opts[1] < 0 ? x0 - R : x1 + R
+      else p.z = opts[2] < 0 ? z0 - R : z1 + R
+    }
+    for (const [x, z, r] of POSTS) {
+      const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 1e-6
+      if (d < r + R) { p.x = x + (dx / d) * (r + R); p.z = z + (dz / d) * (r + R) }
+    }
+    p.x = THREE.MathUtils.clamp(p.x, ROOM.l + R, ROOM.r - R)
+    p.z = THREE.MathUtils.clamp(p.z, ROOM.back + R, ROOM.front - R)
   }
 
   function resize() {
@@ -413,10 +498,14 @@ async function init() {
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector2()
   const pointers = new Map()
-  const pickables = [computer, sw, ...posters]
+  const pickables = [computer, sw, ball, ...posters]
   let drag = null, pinch = 0, hoverKind = null, hoverPoster = null
   let on = false, booting = false, lightsOn = true
-  let focusOn = false, focused = null
+  let focusOn = false, focused = null, walked = false
+  let msg = '', msgUntil = 0
+  const say = (text, sec = 2.2) => { msg = text; msgUntil = clock.elapsedTime + sec }
+  // the room only takes keys while it is on screen and the visitor hasn't booted yet
+  const roomLive = () => !!raf && !booting && !on && !bootEl.classList.contains('hidden')
 
   const pick = (x, y) => {
     const r = stage.getBoundingClientRect()
@@ -443,7 +532,7 @@ async function init() {
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pointers.size === 2 && pinch && !focusOn && !booting) {
       const d = pinchDist()
-      tgt.r = THREE.MathUtils.clamp(tgt.r * (pinch / d), ORBIT.rMin, rMaxAt(tgt.yaw))
+      me.push += (d - pinch) * 0.012 // spread to step forward, pinch to step back
       pinch = d
       return
     }
@@ -451,8 +540,9 @@ async function init() {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y
       if (Math.hypot(dx, dy) > 5) { drag.moved = true; stage.classList.add('dragging') }
       if (drag.moved && !focusOn && !booting) {
-        tgt.yaw = drag.yaw - dx * 0.005
-        tgt.pitch = THREE.MathUtils.clamp(drag.pitch + dy * 0.0035, ...ORBIT.pitch)
+        // grab-and-turn: drag right to turn left, drag down to look up
+        tgt.yaw = drag.yaw + dx * 0.0042
+        tgt.pitch = THREE.MathUtils.clamp(drag.pitch - dy * 0.0034, ...WALK.pitch)
       }
       return
     }
@@ -467,9 +557,11 @@ async function init() {
     if (!wasClick || booting) return
     const o = pick(e.clientX, e.clientY)
     const kind = o?.userData.kind
-    if (kind === 'poster') return focusPoster(o)
+    if (held && kind !== 'poster' && kind !== 'switch' && e.pointerType !== 'mouse') return shoot()
+    if (kind === 'poster') { if (held) drop(); return focusPoster(o) }
     if (kind === 'switch') { lightsOn = !lightsOn; return }
     if (focusOn) return unfocus()
+    if (kind === 'ball' && !held) return grab()
     if (kind === 'computer' && !on && typeof window.boot === 'function') window.boot()
   }
   stage.addEventListener('pointerup', release)
@@ -479,11 +571,81 @@ async function init() {
     e.preventDefault()
     if (booting) return
     if (focusOn) { if (e.deltaY > 0) unfocus(); return }
-    const step = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 120) * 0.0016
-    tgt.r = THREE.MathUtils.clamp(tgt.r * (1 + step), ORBIT.rMin, rMaxAt(tgt.yaw))
+    me.push -= Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 120) * 0.0045 // wheel steps forward / back
   }, { passive: false })
   backEl.addEventListener('click', () => unfocus())
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && focusOn) unfocus() })
+
+  // keyboard walking (layout-independent codes) + R to shoot
+  const MOVE = { KeyW: 'KeyW', ArrowUp: 'KeyW', KeyS: 'KeyS', ArrowDown: 'KeyS', KeyA: 'KeyA', ArrowLeft: 'KeyA', KeyD: 'KeyD', ArrowRight: 'KeyD' }
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && focusOn) return unfocus()
+    if (!roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.target instanceof Element && e.target.closest('input,textarea,select,[contenteditable]')) return
+    if (MOVE[e.code]) {
+      e.preventDefault()
+      pressed.add(MOVE[e.code])
+      if (focusOn) unfocus()
+    } else if (e.key === 'Shift') pressed.add('run')
+    else if (e.code === 'KeyR' && !e.repeat) { e.preventDefault(); if (held) shoot(); else say(ballNear() ? 'Click the ball to pick it up' : 'Find the ball by the hoop') }
+  })
+  addEventListener('keyup', (e) => { if (MOVE[e.code]) pressed.delete(MOVE[e.code]); if (e.key === 'Shift') pressed.delete('run') })
+  addEventListener('blur', () => pressed.clear())
+
+  // touch pad: hold an arrow to walk; Shoot appears while holding the ball
+  padEl.addEventListener('pointerdown', (e) => {
+    const k = e.target.closest('button')?.dataset.k
+    if (!k) return
+    e.preventDefault()
+    if (k === 'shoot') return shoot()
+    pressed.add(k)
+    e.target.setPointerCapture?.(e.pointerId)
+    if (focusOn) unfocus()
+  })
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) padEl.addEventListener(ev, (e) => {
+    const k = e.target.closest?.('button')?.dataset.k
+    if (k && k !== 'shoot') pressed.delete(k)
+  })
+  padEl.addEventListener('contextmenu', (e) => e.preventDefault())
+
+  // ---------- ball: grab, drop, shoot ----------
+  const ballNear = () => Math.hypot(ball.position.x - me.p.x, ball.position.z - me.p.z) < 2.6 // reach, measured on the floor
+  function grab() {
+    if (!ballNear()) return say('Walk closer to grab the ball')
+    held = true
+    shot = null
+    bv.set(0, 0, 0)
+    say(COARSE ? 'Tap anywhere to shoot' : 'Aim at the hoop · press R to shoot', 2.6)
+  }
+  function drop() {
+    held = false
+    bv.set(0, -0.5, 0)
+    shot = null
+  }
+  const fwd3 = new THREE.Vector3(), toRim = new THREE.Vector3()
+  function shoot() {
+    if (!held) return
+    held = false
+    shots++
+    camera.getWorldDirection(fwd3)
+    toRim.copy(RIM).sub(ball.position)
+    const dh = Math.hypot(toRim.x, toRim.z)
+    const aim = dh > 1e-3 ? (fwd3.x * toRim.x + fwd3.z * toRim.z) / (Math.hypot(fwd3.x, fwd3.z) * dh || 1) : 0
+    if (aim > 0.92 && dh > 0.5 && dh < 9.5) {
+      // aimed at the hoop: a proper arc, with error that grows with distance and sloppy aim
+      const off = 0.035 + dh * 0.014 + (1 - aim) * 1.6
+      const tx = RIM.x + (Math.random() * 2 - 1) * off, tz = RIM.z + (Math.random() * 2 - 1) * off
+      const dy = RIM.y - ball.position.y
+      let T = 0.55 + dh * 0.11
+      let vy = (dy + 0.5 * GRAV * T * T) / T
+      const vyMax = Math.sqrt(2 * GRAV * Math.max(0.3, ROOM.ceil - 0.3 - ball.position.y)) // stay under the ceiling
+      if (vy > vyMax) { vy = vyMax; T = (vy + Math.sqrt(Math.max(0, vy * vy - 2 * GRAV * dy))) / GRAV }
+      bv.set((tx - ball.position.x) / T, vy, (tz - ball.position.z) / T)
+    } else {
+      bv.copy(fwd3).multiplyScalar(5.4)
+      bv.y += 1.8
+    }
+    shot = { scored: false, t: 0 }
+  }
   function pinchDist() {
     const [a, b] = [...pointers.values()]
     return Math.hypot(a.x - b.x, a.y - b.y) || 1
@@ -523,9 +685,11 @@ async function init() {
     booting = true
     unfocus()
     setHover(null)
-    // swing back to the desk view the shortest way round
-    const turns = Math.round((cur.yaw - ORBIT.yaw0) / (Math.PI * 2))
-    Object.assign(tgt, { yaw: ORBIT.yaw0 + turns * Math.PI * 2, pitch: ORBIT.pitch0, r: ORBIT.r0 })
+    pressed.clear()
+    if (held) drop()
+    // walk back to the desk view, turning the shortest way round
+    const turns = Math.round((cur.yaw - WALK.yaw0) / (Math.PI * 2))
+    Object.assign(tgt, { yaw: WALK.yaw0 + turns * Math.PI * 2, pitch: WALK.pitch0 })
   }).observe(ledEl, { attributes: true, attributeFilter: ['class'] })
 
   let zoomT0 = -1
@@ -535,8 +699,8 @@ async function init() {
   let raf = 0
   new MutationObserver(() => {
     if (bootEl.classList.contains('hidden')) {
-      cueEl.classList.remove('show')
-      backEl.classList.remove('show')
+      pressed.clear()
+      for (const el of [cueEl, backEl, keysEl, padEl]) el.classList.remove('show')
       setTimeout(() => {
         cancelAnimationFrame(raf)
         raf = 0
@@ -548,10 +712,76 @@ async function init() {
   // ---------- loop ----------
   let power = 0, cueAmt = 0, lightAmt = 1, focusDist = 5
   const pos = new THREE.Vector3(), look = new THREE.Vector3(), dir = new THREE.Vector3()
-  const orbitPos = new THREE.Vector3(), orbitLook = new THREE.Vector3()
+  const walkPos = new THREE.Vector3(), walkLook = new THREE.Vector3()
   const zoomPos = new THREE.Vector3(SCREEN_POS.x, SCREEN_POS.y, 1.45)
   const fwd = new THREE.Vector3(), toMon = new THREE.Vector3()
+  const wish = new THREE.Vector3(), tmp = new THREE.Vector3(), axis = new THREE.Vector3()
+  const HOLD = new THREE.Vector3(0.24, -0.23, -0.68) // where the held ball sits, in camera space
+  const dummy = new THREE.Object3D()
   const smooth = (k) => k * k * (3 - 2 * k)
+  let shownText = null, glowAmt = 0
+
+  // solid boxes the ball bounces off: [minX, minY, minZ, maxX, maxY, maxZ]
+  const BALL_BOXES = [
+    [-2.15, ROOM.floor, -0.75, 2.65, 0, 1.35], // desk
+    [-1.03, 0, -0.7, 1.03, 1.85, 0.08], // monitor
+    [1.27, 0, -0.85, 2.17, 1.45, 0.55], // tower
+    [HOOP_X - 0.45, 1.65, ROOM.front - 0.065, HOOP_X + 0.45, 2.25, ROOM.front], // backboard
+  ]
+  function ballStep(h) {
+    const p = ball.position, r = BALL_R
+    const prevY = p.y
+    bv.y -= GRAV * h
+    p.addScaledVector(bv, h)
+    // the room
+    const bounce = (ax, lim, sgn, e = 0.58) => {
+      if ((lim - p[ax]) * sgn >= r) return false // distance from the inside of that surface
+      p[ax] = lim - sgn * r
+      if (bv[ax] * sgn > 0) bv[ax] *= -e
+      return true
+    }
+    if (bounce('y', ROOM.floor, -1, 0.62)) {
+      const f = Math.max(0, 1 - 2.2 * h)
+      bv.x *= f; bv.z *= f
+      if (Math.abs(bv.y) < 0.35) bv.y = 0
+    }
+    bounce('y', ROOM.ceil, 1); bounce('x', ROOM.l, -1); bounce('x', ROOM.r, 1); bounce('z', ROOM.back, -1); bounce('z', ROOM.front, 1)
+    // furniture
+    for (const [x0, y0, z0, x1, y1, z1] of BALL_BOXES) {
+      tmp.set(THREE.MathUtils.clamp(p.x, x0, x1), THREE.MathUtils.clamp(p.y, y0, y1), THREE.MathUtils.clamp(p.z, z0, z1))
+      tmp.subVectors(p, tmp)
+      const d = tmp.length()
+      if (d >= r) continue
+      if (d < 1e-6) tmp.set(0, 1, 0); else tmp.divideScalar(d)
+      p.addScaledVector(tmp, r - d)
+      const vn = bv.dot(tmp)
+      if (vn < 0) { bv.addScaledVector(tmp, -1.55 * vn); bv.multiplyScalar(0.9) }
+    }
+    // rim: a ring of radius RIM_R in the horizontal plane
+    tmp.set(p.x - RIM.x, 0, p.z - RIM.z)
+    const hd = tmp.length() || 1e-6
+    tmp.multiplyScalar(RIM_R / hd).add(RIM) // nearest point on the ring
+    tmp.subVectors(p, tmp)
+    const rd = tmp.length(), reach = r + 0.011
+    if (rd < reach && rd > 1e-6) {
+      tmp.divideScalar(rd)
+      p.addScaledVector(tmp, reach - rd)
+      const vn = bv.dot(tmp)
+      if (vn < 0) bv.addScaledVector(tmp, -1.5 * vn)
+      if (shot) shot.rim = true
+    }
+    // through the hoop: crossed the rim plane going down, inside the ring
+    if (shot && !shot.scored && bv.y < 0 && prevY >= RIM.y && p.y < RIM.y && hd < RIM_R - 0.02) {
+      shot.scored = true
+      makes++
+      bv.x *= 0.35; bv.z *= 0.35; bv.y *= 0.6 // the net catches it
+      burst()
+      say(`${shot.rim ? 'Bucket!' : 'Swish!'}  ${makes} / ${shots}`, 2.6)
+    }
+    // roll: spin about the axis perpendicular to travel
+    const sp = Math.hypot(bv.x, bv.z)
+    if (sp > 1e-3) { axis.set(bv.z, 0, -bv.x).divideScalar(sp); ball.rotateOnWorldAxis(axis, (sp * h) / r) }
+  }
 
   function frame() {
     raf = requestAnimationFrame(frame)
@@ -564,6 +794,7 @@ async function init() {
     key.intensity = 70 * L
     wash.intensity = 30 * L
     fill.intensity = 32 * L
+    fill2.intensity = 20 * L
     lampLight.intensity = 9 * L
     bulbMat.emissiveIntensity = 2 * L
     ceilMat.emissiveIntensity = 1.4 * L
@@ -575,7 +806,7 @@ async function init() {
     power += ((on ? 1 : 0) - power) * Math.min(1, dt * 2.2)
     const breathe = 0.5 + 0.5 * Math.sin(t * 2.2)
     const flick = t < flickerUntil ? 0.55 + Math.random() * 0.45 : 1
-    const invite = on ? 0 : cueAmt
+    const invite = on ? 0 : glowAmt
     screenLight.intensity = power * 3.4 * flick + (on ? 0 : 0.3 + breathe * 0.3 + invite * 1.6)
     glass.emissiveIntensity = power * 0.25 * flick + (on ? 0 : 0.02 + breathe * 0.02 + invite * (0.05 + breathe * 0.05))
     ledMat.emissiveIntensity = on ? 2.2 : 0
@@ -583,24 +814,54 @@ async function init() {
     hddMat.emissiveIntensity = on ? (Math.random() > 0.55 ? 2.5 : 0.15) : 0
     routerLeds.forEach((m, i) => { m.emissiveIntensity = i === 0 ? 1.2 : Math.sin(t * (3 + i * 1.7) + i) > 0.2 ? 1.6 : 0.15 })
     for (const g of posters) {
-      const want = (g === hoverPoster && !focusOn ? 0.28 : 0.15) + (1 - L) * 0.05
+      const base = g.userData.glow ?? 0.15
+      const pulse = g.userData.glow ? 0.08 * Math.sin(t * 1.4) : 0
+      const want = base + pulse + (g === hoverPoster && !focusOn ? 0.13 : 0) + (1 - L) * (g.userData.glow ? 0.25 : 0.05)
       g.userData.mat.emissiveIntensity += (want - g.userData.mat.emissiveIntensity) * Math.min(1, dt * 10)
     }
+    for (const m of marks) m.tick(t, L)
     sky.tick(t)
     outsideLeft.tick(t)
 
-    // orbit
-    const s = 1 - Math.exp(-dt * 7)
-    tgt.r = THREE.MathUtils.clamp(tgt.r, ORBIT.rMin, rMaxAt(tgt.yaw))
+    // look
+    const s = 1 - Math.exp(-dt * 9)
     cur.yaw += (tgt.yaw - cur.yaw) * s
     cur.pitch += (tgt.pitch - cur.pitch) * s
-    cur.r += (tgt.r - cur.r) * s
-    cur.r = Math.min(cur.r, rMaxAt(cur.yaw))
-    const drift = REDUCE || booting ? 0 : Math.sin(t * 0.25) * 0.01
-    const y = cur.yaw + drift, p = cur.pitch
+    const y = cur.yaw, p = cur.pitch
     dir.set(Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p))
-    orbitPos.copy(C).addScaledVector(dir, cur.r)
-    orbitLook.copy(orbitPos).addScaledVector(dir, -4)
+
+    // walk: keys / pad / wheel → velocity in the floor plane, then slide along walls and furniture
+    const sy = Math.sin(cur.yaw), cy = Math.cos(cur.yaw)
+    const ix = (pressed.has('KeyD') ? 1 : 0) - (pressed.has('KeyA') ? 1 : 0)
+    const iz = (pressed.has('KeyW') ? 1 : 0) - (pressed.has('KeyS') ? 1 : 0)
+    if (booting) {
+      wish.subVectors(WALK.home, me.p).setY(0)
+      if (wish.length() > 0.02) wish.multiplyScalar(Math.min(4, wish.length() * 3) / wish.length())
+      else wish.set(0, 0, 0)
+      me.push = 0
+    } else {
+      wish.set(-sy * iz + cy * ix, 0, -cy * iz - sy * ix)
+      if (wish.lengthSq() > 0) {
+        wish.normalize().multiplyScalar(pressed.has('run') ? WALK.run : WALK.speed)
+        if (!walked) { walked = true; keysEl.classList.add('dim') }
+      }
+    }
+    me.v.lerp(wish, 1 - Math.exp(-dt * 10))
+    if (me.v.lengthSq() < 1e-8) me.v.set(0, 0, 0)
+    me.p.addScaledVector(me.v, dt)
+    if (me.push) {
+      const step = me.push * (1 - Math.exp(-dt * 8))
+      me.push -= step
+      if (Math.abs(me.push) < 1e-3) me.push = 0
+      me.p.x -= sy * step
+      me.p.z -= cy * step
+    }
+    collide(me.p)
+    const speed = Math.hypot(me.v.x, me.v.z)
+    me.bob += dt * speed * 3.4
+    const bob = REDUCE ? 0 : Math.sin(me.bob) * 0.014 * Math.min(1, speed / WALK.speed)
+    walkPos.set(me.p.x, WALK.eye + bob, me.p.z)
+    walkLook.copy(walkPos).addScaledVector(dir, -4)
 
     // poster focus blend
     focusAmt = THREE.MathUtils.clamp(focusAmt + (focusOn ? dt : -dt) / 0.85, 0, 1)
@@ -608,8 +869,8 @@ async function init() {
     focusPos.lerp(focusPosTgt, fs)
     focusLook.lerp(focusLookTgt, fs)
     const fk = smooth(focusAmt)
-    pos.lerpVectors(orbitPos, focusPos, fk)
-    look.lerpVectors(orbitLook, focusLook, fk)
+    pos.lerpVectors(walkPos, focusPos, fk)
+    look.lerpVectors(walkLook, focusLook, fk)
 
     // dolly into the screen at the end of the boot
     if (zoomT0 >= 0) {
@@ -619,15 +880,68 @@ async function init() {
     }
     camera.position.copy(pos)
     camera.lookAt(look)
+    camera.updateMatrixWorld()
 
-    // "click the computer" cue when looking toward the desk
+    // ball: carried in view, or flying / rolling under simple physics
+    if (held) {
+      ball.position.copy(HOLD).applyMatrix4(camera.matrixWorld)
+      ball.rotation.y += dt * 0.6
+    } else {
+      const n = 4
+      for (let i = 0; i < n; i++) ballStep(dt / n)
+      if (shot && (shot.t += dt) > 5) shot = null
+    }
+
+    // confetti + rim flash + net swish
+    if (confetti.visible) {
+      let alive = 0
+      bits.forEach((q, i) => {
+        if (q.life <= 0) { dummy.scale.setScalar(0) } else {
+          alive++
+          q.life -= dt
+          q.v.y -= 4.2 * dt
+          q.v.multiplyScalar(Math.max(0, 1 - 1.5 * dt))
+          q.v.x += Math.sin(t * 6 + q.ph) * 0.9 * dt // flutter
+          q.p.addScaledVector(q.v, dt)
+          if (q.p.y < ROOM.floor + 0.012) { q.p.y = ROOM.floor + 0.012; q.v.set(0, 0, 0); q.w.multiplyScalar(0.8) }
+          q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt
+          dummy.scale.setScalar(Math.min(1, q.life / 0.6))
+        }
+        dummy.position.copy(q.p)
+        dummy.rotation.copy(q.r)
+        dummy.updateMatrix()
+        confetti.setMatrixAt(i, dummy.matrix)
+      })
+      confetti.instanceMatrix.needsUpdate = true
+      if (!alive) confetti.visible = false
+    }
+    flashT += dt
+    const fl = Math.max(0, 1 - flashT / 0.7)
+    flash.material.opacity = fl * 0.9
+    flash.scale.setScalar(0.3 + (1 - fl) * 1.4)
+    rimMat.emissiveIntensity = fl * 2.4
+    swish = Math.max(0, swish - dt * 1.6)
+    net.scale.set(1 - swish * 0.12 * Math.sin(t * 30), 1 + swish * 0.3, 1 - swish * 0.12 * Math.sin(t * 30))
+
+    // computer: soft glow as you walk up to the desk, cue when looking at it
     fwd.copy(look).sub(pos).normalize()
     toMon.copy(SCREEN_POS).sub(pos)
     const monDist = toMon.length()
     const aim = fwd.dot(toMon.normalize())
-    const aimed = !on && !booting && focusAmt < 0.05 && aim > 0.94 && monDist < 6.5
-    cueAmt += (((aimed || hoverKind === 'computer') && !on ? 1 : 0) - cueAmt) * Math.min(1, dt * 4)
-    cueEl.classList.toggle('show', cueAmt > 0.5 && !on)
+    const idle = !on && !booting && focusAmt < 0.05
+    const prox = idle ? THREE.MathUtils.clamp((4.6 - monDist) / 2.4, 0, 1) : 0
+    const aimed = idle && aim > 0.94 && monDist < 7.5
+    glowAmt += (Math.max(prox * 0.75, aimed ? 1 : 0, hoverKind === 'computer' ? 1 : 0) - glowAmt) * Math.min(1, dt * 4)
+    cueAmt += (((aimed || hoverKind === 'computer' || (prox > 0.55 && aim > 0.55)) && !on ? 1 : 0) - cueAmt) * Math.min(1, dt * 4)
+
+    // one line of guidance at a time: event > carrying the ball > computer
+    const text = on ? null : t < msgUntil ? msg : held ? (COARSE ? 'Tap anywhere to shoot' : 'Press R to shoot') : cueAmt > 0.5 ? 'Click the computer to enter' : null
+    if (text && text !== shownText) cueText.textContent = text
+    shownText = text
+    cueEl.classList.toggle('show', !!text)
+    keysEl.classList.toggle('show', !booting && !on && focusAmt < 0.5)
+    padEl.classList.toggle('show', COARSE && !booting && !on && focusAmt < 0.5)
+    padEl.classList.toggle('holding', held)
 
     if (composer) {
       let fd = focusAmt > 0.5 ? pos.distanceTo(focusLook) : aim > 0.9 ? monDist : wallHit(pos, fwd)
@@ -640,15 +954,37 @@ async function init() {
   frame()
 
   // ---------- builders ----------
-  function poster(wall, along, y, w, h, tex, title) {
+  // glowTex: an emissive-only layer (black = no glow); glow: its resting intensity
+  function poster(wall, along, y, w, h, tex, title, { glowTex = null, glow = null } = {}) {
     const g = group(...onWall(wall, along, y), FACE[wall])
     g.translateZ(0.02)
     add(new THREE.BoxGeometry(w + 0.05, h + 0.05, 0.03), frameMat, 0, 0, 0, g)
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, emissive: new THREE.Color('#ffffff'), emissiveMap: tex, emissiveIntensity: 0.1 })
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, emissive: new THREE.Color('#ffffff'), emissiveMap: glowTex || tex, emissiveIntensity: glow ?? 0.1 })
     add(new THREE.PlaneGeometry(w, h), mat, 0, 0, 0.017, g, false)
-    Object.assign(g.userData, { kind: 'poster', size: { w, h }, mat, title })
+    Object.assign(g.userData, { kind: 'poster', size: { w, h }, mat, title, glow })
     posters.push(g)
     return g
+  }
+
+  // extruded, emissive wall mark with a brand-coloured halo on the wall behind it
+  // layers: [[shapes, depth], ...] — a deeper layer sits in front where layers overlap
+  function teamMark(layers, along, color, glowColor, base) {
+    const g = group(...onWall('front', along, 2.78), FACE.front)
+    g.translateZ(0.012)
+    const mat = std(color, 0.35, 0.35, { emissive: new THREE.Color(glowColor), emissiveIntensity: base })
+    for (const [shapes, depth] of layers) {
+      const geo = new THREE.ExtrudeGeometry(shapes, { depth, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.01, bevelSegments: 2 })
+      add(geo, mat, 0, 0, 0.03, g).scale.setScalar(0.42)
+    }
+    const haloMat = new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, radialGlow(glowColor)), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.4 })
+    add(new THREE.PlaneGeometry(1.05, 0.9), haloMat, 0, 0, 0.004, g, false)
+    return {
+      tick(t, L) {
+        const k = 0.9 + 0.1 * Math.sin(t * 1.3 + along)
+        mat.emissiveIntensity = (base + (1 - L) * 0.5) * k
+        haloMat.opacity = (0.28 + (1 - L) * 0.3) * k
+      },
+    }
   }
 
   function skateDeck(along, y, tilt, tex) {
@@ -867,6 +1203,29 @@ function radialGlow(color) {
   }
 }
 
+// ---------- team marks (stylised, built from simple outlines) ----------
+const arcPts = (cx, cy, r, a0, a1, n = 20) =>
+  Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r] })
+const rectPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+const toShape = (pts, Cls = THREE.Shape) => new Cls(pts.map(([x, y]) => new THREE.Vector2(x, y)))
+
+// italic "motion" P with speed lines
+function purdueShapes() {
+  const sk = (pts) => pts.map(([x, y]) => [x + 0.22 * y + 0.14, y])
+  const outer = toShape(sk([[-0.34, -0.5], [-0.06, -0.5], [-0.06, -0.02], ...arcPts(0.12, 0.24, 0.26, -Math.PI / 2, Math.PI / 2), [-0.34, 0.5]]))
+  outer.holes.push(toShape(sk([[-0.06, 0.12], ...arcPts(0.1, 0.24, 0.12, -Math.PI / 2, Math.PI / 2), [-0.06, 0.36]]).reverse(), THREE.Path))
+  const lines = [rectPts(-0.7, 0.3, -0.42, 0.38), rectPts(-0.62, 0.15, -0.42, 0.23), rectPts(-0.54, 0, -0.42, 0.08)].map((p) => toShape(sk(p)))
+  return [[[outer, ...lines], 0.14]]
+}
+
+// interlocking I and U
+function iuShapes() {
+  const u = toShape([[-0.42, 0.4], ...arcPts(0, 0.02, 0.42, Math.PI, Math.PI * 2), [0.42, 0.4], [0.27, 0.4], ...arcPts(0, 0.02, 0.27, Math.PI * 2, Math.PI), [-0.27, 0.4]])
+  const uSerifs = [rectPts(-0.49, 0.38, -0.2, 0.46), rectPts(0.2, 0.38, 0.49, 0.46)].map((p) => toShape(p))
+  const i = [rectPts(-0.075, -0.56, 0.075, 0.56), rectPts(-0.17, 0.48, 0.17, 0.56), rectPts(-0.17, -0.56, 0.17, -0.48)].map((p) => toShape(p))
+  return [[[u, ...uSerifs], 0.14], [i, 0.17]]
+}
+
 function labelMat(text, { color = P.dim, w = 1024, h = 128 } = {}) {
   const tex = canvasTex(w, h, (g) => {
     g.fillStyle = color
@@ -955,6 +1314,8 @@ function posterTitle(g, w, h, title, sub, { color = P.text, accent = P.acc, size
   g.fillStyle = color
   g.font = `700 ${size}px Inter, sans-serif`
   if ('letterSpacing' in g) g.letterSpacing = '-1px'
+  // shrink long titles so they stay on one line
+  while (size > 24 && g.measureText(title).width > w - 88) g.font = `700 ${(size -= 2)}px Inter, sans-serif`
   g.fillText(title, 44, h - 92)
   g.fillStyle = P.muted
   g.font = '500 19px "JetBrains Mono", monospace'
@@ -1084,45 +1445,51 @@ function drawContracts(g, w, h) {
 
 function drawFinalFour(g, w, h) {
   posterBase(g, w, h, '#14141f', 'rgba(217,185,106,0.12)')
-  // half court
-  g.strokeStyle = 'rgba(217,185,106,0.35)'; g.lineWidth = 2.5
-  g.strokeRect(40, 40, w - 80, 300)
-  g.beginPath(); g.arc(w / 2, 40, 210, 0.08 * Math.PI, 0.92 * Math.PI); g.stroke()
-  g.strokeRect(w / 2 - 70, 40, 140, 170)
-  g.beginPath(); g.arc(w / 2, 210, 60, 0, Math.PI); g.stroke()
-  mono(g, 44, P.gold, 'PURDUE · 2024', w / 2, 120)
-  const run = [['R64', 'GRAMBLING ST', 'W 78–50'], ['R32', 'UTAH ST', 'W 106–67'], ['S16', 'GONZAGA', 'W 80–68'], ['E8', 'TENNESSEE', 'W 72–66'], ['F4', 'NC STATE', 'W 63–50'], ['NC', 'UCONN', 'L 60–75']]
+  mono(g, 30, P.gold, '2024 PURDUE', w / 2, 112)
+  mono(g, 30, P.gold, 'BOILERMAKERS', w / 2, 154)
+  g.strokeStyle = 'rgba(217,185,106,0.5)'; g.lineWidth = 2
+  g.beginPath(); g.moveTo(w / 2 - 60, 190); g.lineTo(w / 2 + 60, 190); g.stroke()
+  const run = [['R64', 'GRAMBLING ST', 'W 78–50'], ['R32', 'UTAH ST', 'W 106–67'], ['S16', 'GONZAGA', 'W 80–68'], ['E8', 'TENNESSEE', 'W 72–66'], ['F4', 'NC STATE', 'W 63–50']]
   run.forEach(([rd, opp, res], i) => {
-    const y = 380 + i * 38
-    mono(g, 15, P.muted, rd, 60, y, 'left')
-    mono(g, 17, P.text, opp, 120, y, 'left')
-    mono(g, 17, res[0] === 'W' ? P.gold : P.muted, res, w - 60, y, 'right')
+    const y = 270 + i * 66
+    mono(g, 16, P.muted, rd, 60, y, 'left')
+    mono(g, 21, P.text, opp, 128, y, 'left')
+    mono(g, 21, P.gold, res, w - 60, y, 'right')
     g.strokeStyle = 'rgba(217,185,106,0.15)'; g.lineWidth = 1
-    g.beginPath(); g.moveTo(60, y + 14); g.lineTo(w - 60, y + 14); g.stroke()
+    g.beginPath(); g.moveTo(60, y + 24); g.lineTo(w - 60, y + 24); g.stroke()
   })
-  posterTitle(g, w, h, 'FINAL FOUR', 'GLENDALE · NATIONAL RUNNER-UP', { accent: P.gold, size: 72 })
+  posterTitle(g, w, h, 'FINAL FOUR', 'COLLEGE BASKETBALL', { accent: P.gold, size: 72 })
 }
 
 function drawIndiana(g, w, h) {
   posterBase(g, w, h, '#141012', 'rgba(200,70,60,0.14)')
-  // field from above with a crimson end zone
+  // crimson end-zone band
   g.fillStyle = 'rgba(200,70,60,0.85)'
-  g.fillRect(50, 50, w - 100, 120)
+  g.fillRect(40, 40, w - 80, 104)
   g.fillStyle = P.cream
-  g.font = '800 64px Inter, sans-serif'; g.textAlign = 'center'
+  g.font = '800 58px Inter, sans-serif'; g.textAlign = 'center'
   if ('letterSpacing' in g) g.letterSpacing = '6px'
-  g.fillText('HOOSIERS', w / 2, 133)
+  g.fillText('HOOSIERS', w / 2, 114)
   if ('letterSpacing' in g) g.letterSpacing = '0px'
-  g.strokeStyle = 'rgba(246,237,218,0.25)'; g.lineWidth = 2
-  g.strokeRect(50, 50, w - 100, 500)
-  for (let i = 1; i < 8; i++) { const y = 170 + i * 47.5; g.beginPath(); g.moveTo(50, y); g.lineTo(w - 50, y); g.stroke() }
-  for (let i = 0; i < 8; i++) for (const x of [w * 0.38, w * 0.62]) { const y = 175 + i * 47.5; g.beginPath(); g.moveTo(x - 8, y + 24); g.lineTo(x + 8, y + 24); g.stroke() }
-  mono(g, 28, P.cream, 'INDIANA FOOTBALL', w / 2, 410)
-  mono(g, 18, P.crimson, '2025 SEASON', w / 2, 448)
-  // stars
-  g.fillStyle = P.crimson
-  for (let i = 0; i < 5; i++) star(g, w / 2 - 120 + i * 60, 500, 12)
-  posterTitle(g, w, h, 'NATIONAL', 'CHAMPIONS · COLLEGE FOOTBALL', { color: P.cream, accent: P.crimson, size: 72 })
+  mono(g, 17, P.cream, 'INDIANA FOOTBALL · 2025 · 16–0', w / 2, 184)
+  // the undefeated run, game by game (regular season left, Nov–postseason right)
+  const games = [
+    ['AUG 30', 'OLD DOMINION', '27–14'], ['SEP 6', 'KENNESAW ST', '56–9'], ['SEP 12', 'INDIANA ST', '73–0'], ['SEP 20', 'ILLINOIS', '63–10'],
+    ['SEP 27', '@ IOWA', '20–15'], ['OCT 11', '@ OREGON', '30–20'], ['OCT 18', 'MICHIGAN ST', '38–13'], ['OCT 25', 'UCLA', '56–6'],
+    ['NOV 1', '@ MARYLAND', '55–10'], ['NOV 8', '@ PENN ST', '27–24'], ['NOV 15', 'WISCONSIN', '31–7'], ['NOV 28', '@ PURDUE', '56–3'],
+    ['BIG TEN CG', 'OHIO ST', '13–10'], ['ROSE BOWL', 'ALABAMA', '38–3'], ['PEACH BOWL', 'OREGON', '56–22'], ['NATL TITLE', 'MIAMI', '27–21'],
+  ]
+  const colW = (w - 100) / 2
+  games.forEach(([when, opp, score], i) => {
+    const x = 40 + Math.floor(i / 8) * (colW + 20), y = 222 + (i % 8) * 54
+    const post = i >= 12
+    mono(g, 11, post ? P.crimson : P.muted, when, x, y, 'left')
+    mono(g, 15, P.cream, opp, x, y + 22, 'left')
+    mono(g, 15, post ? P.gold : P.crimson, `W ${score}`, x + colW, y + 22, 'right')
+    g.strokeStyle = 'rgba(246,237,218,0.1)'; g.lineWidth = 1
+    g.beginPath(); g.moveTo(x, y + 33); g.lineTo(x + colW, y + 33); g.stroke()
+  })
+  posterTitle(g, w, h, 'NATIONAL CHAMPIONS', 'COLLEGE FOOTBALL · UNDEFEATED', { color: P.cream, accent: P.crimson, size: 72 })
 }
 function star(g, x, y, r) {
   g.beginPath()
@@ -1182,29 +1549,98 @@ function drawAnalytics(g, w, h) {
   posterTitle(g, w, h, 'ANALYTICS', 'SPORTS DATA · DECISIONS', { size: 66 })
 }
 
-function drawFrontOffice(g, w, h) {
+// full depth chart laid out the way an NFL club publishes it:
+// 11-personnel offense, 4-3 base defense with a nickel, specialists, and the 53-man roster mix
+function drawSportsMgmt(g, w, h) {
   posterBase(g, w, h)
-  mono(g, 16, P.muted, 'DEPTH CHART', 44, 64, 'left')
-  ;['QB', 'RB', 'WR', 'TE', 'OL'].forEach((pos, r) => {
-    const y = 84 + r * 46
-    mono(g, 16, P.dim, pos, 44, y + 24, 'left')
-    for (let c = 0; c < 3; c++) {
-      g.fillStyle = c === 0 ? 'rgba(140,180,255,0.55)' : 'rgba(192,200,224,0.16)'
-      g.fillRect(100 + c * 145, y + 6, 130, 28)
+  const cw = 84, ch = 62
+  const chip = (pos, cx, y) => {
+    const x = cx - cw / 2
+    g.fillStyle = 'rgba(26,26,46,0.92)'
+    g.strokeStyle = 'rgba(140,180,255,0.35)'; g.lineWidth = 1.5
+    g.beginPath(); g.roundRect ? g.roundRect(x, y, cw, ch, 8) : g.rect(x, y, cw, ch); g.fill(); g.stroke()
+    mono(g, 15, P.text, pos, cx, y + 21)
+    // 1st / 2nd / 3rd string
+    ;[[1, 'rgba(140,180,255,0.85)'], [0.72, 'rgba(192,200,224,0.38)'], [0.48, 'rgba(192,200,224,0.2)']].forEach(([k, c], i) => {
+      g.fillStyle = c
+      g.fillRect(x + 10, y + 31 + i * 9, (cw - 20) * k, 5)
+    })
+  }
+  const label = (t, y) => {
+    mono(g, 15, P.acc, t, 44, y, 'left')
+    g.strokeStyle = 'rgba(140,180,255,0.18)'; g.lineWidth = 1
+    g.beginPath(); g.moveTo(44 + g.measureText(t).width + 14, y - 5); g.lineTo(w - 44, y - 5); g.stroke()
+  }
+  mono(g, 16, P.muted, 'DEPTH CHART', 44, 62, 'left')
+  mono(g, 13, P.muted, '1ST · 2ND · 3RD', w - 44, 62, 'right')
+
+  label('OFFENSE · 11 PERSONNEL', 108)
+  ;[['WR-X', 62], ['LT', 250], ['LG', 350], ['C', 450], ['RG', 550], ['RT', 650], ['TE', 750], ['WR-Z', 838]].forEach(([p, x]) => chip(p, x, 126))
+  chip('SLOT', 156, 206); chip('QB', 450, 206); chip('RB', 450, 286)
+
+  label('DEFENSE · 4-3 BASE / NICKEL', 400)
+  ;[['DE', 285], ['DT', 395], ['DT', 505], ['DE', 615]].forEach(([p, x]) => chip(p, x, 418))
+  ;[['WLB', 330], ['MLB', 450], ['SLB', 570]].forEach(([p, x]) => chip(p, x, 498))
+  ;[['LCB', 62], ['NB', 186], ['SS', 360], ['FS', 540], ['RCB', 838]].forEach(([p, x]) => chip(p, x, 578))
+
+  label('SPECIAL TEAMS', 692)
+  ;['K', 'P', 'LS', 'H', 'KR', 'PR'].forEach((p, i) => chip(p, 88 + i * 145, 710))
+
+  // 53-man roster by position group
+  label('53-MAN ROSTER', 840)
+  const groups = [['QB', 3], ['RB', 4], ['WR', 6], ['TE', 3], ['OL', 9], ['DL', 9], ['LB', 6], ['CB', 6], ['S', 4], ['ST', 3]]
+  let x = 44
+  const span = w - 88
+  groups.forEach(([p, n], i) => {
+    const bw = (span * n) / 53
+    const off = i < 5, st = i === 9
+    g.fillStyle = st ? 'rgba(217,185,106,0.6)' : off ? `rgba(140,180,255,${0.75 - i * 0.09})` : `rgba(192,200,224,${0.5 - (i - 5) * 0.08})`
+    g.fillRect(x + 1, 862, bw - 2, 34)
+    mono(g, 13, P.dim, p, x + bw / 2, 922)
+    mono(g, 12, P.muted, String(n), x + bw / 2, 942)
+    x += bw
+  })
+  mono(g, 13, P.muted, 'OFFENSE 25 · DEFENSE 25 · SPECIALISTS 3 · PRACTICE SQUAD 16', w / 2, 990)
+  posterTitle(g, w, h, 'SPORTS MANAGEMENT', 'ROSTER CONSTRUCTION · DEPTH CHART', { size: 60 })
+}
+
+// conference wall chart: every member as a glowing monogram badge in its primary colour.
+// glowOnly draws just the lit parts on black, used as the poster's emissive layer.
+const BIG_TEN = [
+  ['ILLINOIS', 'I', '#E84A27'], ['INDIANA', 'IU', '#D6142B'], ['IOWA', 'I', '#FFCD00'],
+  ['MARYLAND', 'M', '#E03A3E'], ['MICHIGAN', 'M', '#FFCB05'], ['MICHIGAN ST', 'S', '#2F8A62'],
+  ['MINNESOTA', 'M', '#B0223A'], ['NEBRASKA', 'N', '#E41C38'], ['NORTHWESTERN', 'N', '#7D55C7'],
+  ['OHIO STATE', 'O', '#D11A1A'], ['OREGON', 'O', '#2E9B5A'], ['PENN STATE', 'PS', '#3B6FD6'],
+  ['PURDUE', 'P', '#CEB888'], ['RUTGERS', 'R', '#CC0033'], ['UCLA', 'UCLA', '#2D68C4'],
+  ['USC', 'SC', '#C41E3A'], ['WASHINGTON', 'W', '#7A5CC7'], ['WISCONSIN', 'W', '#C5050C'],
+]
+function drawBigTen(g, w, h, glowOnly = false) {
+  if (glowOnly) { g.fillStyle = '#000'; g.fillRect(0, 0, w, h) } else posterBase(g, w, h, '#12121c', 'rgba(140,180,255,0.08)')
+  const R = 50
+  BIG_TEN.forEach(([name, mark, col], i) => {
+    const cx = 160 + (i % 3) * 290, cy = 118 + Math.floor(i / 3) * 150
+    g.save()
+    g.shadowColor = col
+    g.shadowBlur = glowOnly ? 34 : 22
+    // badge ring
+    g.lineWidth = 5
+    g.strokeStyle = col
+    g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke()
+    if (!glowOnly) { g.fillStyle = 'rgba(10,10,18,0.9)'; g.fill() }
+    // monogram
+    const fs = mark.length > 2 ? 30 : mark.length > 1 ? 42 : 58
+    g.font = `900 ${fs}px "Arial Black", Inter, sans-serif`
+    g.textAlign = 'center'; g.textBaseline = 'middle'
+    g.fillStyle = col
+    g.fillText(mark, cx, cy + 2)
+    g.restore()
+    if (!glowOnly) {
+      g.textBaseline = 'alphabetic'
+      mono(g, 15, P.dim, name, cx, cy + R + 30)
     }
   })
-  mono(g, 16, P.muted, 'CAP ALLOCATION', 44, 360, 'left')
-  const parts = [0.34, 0.22, 0.18, 0.14, 0.12]
-  let a0 = -Math.PI / 2
-  parts.forEach((p, i) => {
-    const a1 = a0 + p * Math.PI * 2
-    g.strokeStyle = i === 0 ? P.acc : `rgba(192,200,224,${0.55 - i * 0.1})`
-    g.lineWidth = 34
-    g.beginPath(); g.arc(w / 2, 490, 92, a0 + 0.03, a1 - 0.03); g.stroke()
-    a0 = a1
-  })
-  mono(g, 20, P.text, 'CAP', w / 2, 497)
-  posterTitle(g, w, h, 'FRONT OFFICE', 'SPORTS MANAGEMENT', { size: 60 })
+  g.textBaseline = 'alphabetic'
+  if (!glowOnly) posterTitle(g, w, h, 'BIG TEN', 'CONFERENCE · 18 MEMBERS', { size: 72 })
 }
 
 function drawAperture(g, w, h) {
