@@ -37,6 +37,15 @@ const R2 = { l: ROOM.l, r: ROOM.r, back: ROOM.front + WALL_T, front: ROOM.front 
 const R2_W = R2.r - R2.l, R2_D = R2.front - R2.back, R2_H = R2.ceil - R2.floor
 const R2_MID = { x: (R2.l + R2.r) / 2, z: (R2.back + R2.front) / 2, y: (R2.floor + R2.ceil) / 2 }
 const PLATE_X = 0.6, PLATE_Z = R2.back + 3.8, MOUND_DIST = 8.5
+// bowling wing: off the ballpark's right wall through a wide arch, down and to the right of the field.
+// Three lanes run toward +z; a crowd riser stands behind the approaches. LANE.foul is the foul line z.
+const BW = { l: R2.r, r: R2.r + 13, back: R2.back + 7, front: R2.front + 18, floor: R2.floor, ceil: R2.ceil }
+const BW_OPEN = [R2.back + 9, R2.back + 15.6], BW_OPEN_H = 3.9
+const LANE = { w: 1.8, gut: 0.38, len: 19, foul: R2.back + 17.6, x: [10.6, 13.5, 16.4], play: 1 }
+const HEAD_Z = LANE.foul + LANE.len, DECK_END = HEAD_Z + 1.7, PIN_R = 0.1, BOWL_R = 0.186
+const CROWD_Z = BW.back + 1.15 // where the spectators stand on the riser
+// pin spots relative to the head pin (+x is the bowler's left, so pin 2 sits at +x)
+const PIN_SPOTS = [[0, 0], [0.262, 0.454], [-0.262, 0.454], [0.524, 0.908], [0, 0.908], [-0.524, 0.908], [0.786, 1.362], [0.262, 1.362], [-0.262, 1.362], [-0.786, 1.362]]
 // official logo files for the glowing wall marks (e.g. 'assets/logos/purdue.svg'); empty = built-in outlines
 const TEAM_SVG = { purdue: '', iu: '' }
 // the hoop hangs on the second room's back wall, in the corner behind home plate
@@ -237,9 +246,16 @@ async function init() {
   const fence = add(new THREE.PlaneGeometry(R2_W, R2_H), wall2, R2_MID.x, R2_MID.y, R2.front, scene, false)
   fence.rotation.y = Math.PI
   blockers.push(f2, c2, fence)
-  for (const [x, ry] of [[R2.l, FACE.left], [R2.r, FACE.right]]) {
-    const m = add(new THREE.PlaneGeometry(R2_D, R2_H), wall2, x, R2_MID.y, R2_MID.z, scene, false)
-    m.rotation.y = ry
+  {
+    const m = add(new THREE.PlaneGeometry(R2_D, R2_H), wall2, R2.l, R2_MID.y, R2_MID.z, scene, false)
+    m.rotation.y = FACE.left
+    blockers.push(m)
+  }
+  // right wall: shared with the bowling wing (seen from both sides), with the arch cut through it
+  const wall2b = std('#141a24', 0.92, 0, { side: THREE.DoubleSide })
+  for (const [z0, z1, y0, y1] of [[R2.back, BW_OPEN[0], R2.floor, R2.ceil], [BW_OPEN[1], R2.front, R2.floor, R2.ceil], [BW_OPEN[0], BW_OPEN[1], R2.floor + BW_OPEN_H, R2.ceil]]) {
+    const m = add(new THREE.PlaneGeometry(z1 - z0, y1 - y0), wall2b, R2.r, (y0 + y1) / 2, (z0 + z1) / 2, scene, false)
+    m.rotation.y = FACE.right
     blockers.push(m)
   }
   // outfield wall padding with a yellow home-run line, distance markers, and a back-wall batter's eye
@@ -647,6 +663,344 @@ async function init() {
   batArm.add(bat)
   batPivot.visible = false
 
+  // ---------- bowling wing: shell, three lanes, pin decks, crowd riser, ball returns ----------
+  const BW_W = BW.r - BW.l, BW_D = BW.front - BW.back, BW_H = BW.ceil - BW.floor
+  const BW_MID = { x: (BW.l + BW.r) / 2, z: (BW.back + BW.front) / 2, y: (BW.floor + BW.ceil) / 2 }
+  const LX = LANE.x[LANE.play] // the lane you bowl on
+  const GUT_X = LANE.w / 2 + LANE.gut // centre line to the outer edge of a gutter
+  const LANES_X0 = LANE.x[0] - GUT_X - 0.1, LANES_X1 = LANE.x[2] + GUT_X + 0.1
+  const APPROACH_Z = BW.back + 2.9, BOWLER_Z0 = LANE.foul - 3.6
+  // a plane whose texture tiles every `tile` units, so one material fits floors of any size
+  const tiled = (w, h, tile) => {
+    const geo = new THREE.PlaneGeometry(w, h), uv = geo.attributes.uv
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * w) / tile, (uv.getY(i) * h) / tile)
+    return geo
+  }
+  const floorAt = (x0, z0, x1, z1, mat, y = BW.floor, tile = 3) => {
+    const m = add(tiled(x1 - x0, z1 - z0, tile), mat, (x0 + x1) / 2, y, (z0 + z1) / 2, scene, false)
+    m.rotation.x = -Math.PI / 2
+    blockers.push(m)
+    return m
+  }
+  const carpetM = std('#ffffff', 0.95, 0, { map: canvasTex(512, 512, drawCarpet) })
+  carpetM.map.wrapS = carpetM.map.wrapT = THREE.RepeatWrapping
+  floorAt(BW.l, BW.back, BW.r, LANE.foul, carpetM)
+  floorAt(BW.l, LANE.foul, LANES_X0, BW.front, carpetM)
+  floorAt(LANES_X1, LANE.foul, BW.r, BW.front, carpetM)
+  floorAt(LANES_X0, LANE.foul, LANES_X1, BW.front, std('#07070b', 1, 0), BW.floor - 0.32) // pit under the lane beds
+  const bwCeil = add(new THREE.PlaneGeometry(BW_W, BW_D), std('#0a0912', 1, 0), BW_MID.x, BW.ceil, BW_MID.z, scene, false)
+  bwCeil.rotation.x = Math.PI / 2
+  blockers.push(bwCeil)
+  const wallBMat = std('#16131f', 0.9, 0)
+  // the wing's back wall seen from outside (through the Starry Night window at a steep angle): night blue
+  const bwOuter = add(new THREE.PlaneGeometry(BW_W, BW_H), flat('#0c1630'), BW_MID.x, BW_MID.y, BW.back - 0.01, scene, false)
+  bwOuter.rotation.y = Math.PI
+  for (const [w, x, z, ry] of [[BW_W, BW_MID.x, BW.back, FACE.back], [BW_W, BW_MID.x, BW.front, FACE.front], [BW_D, BW.r, BW_MID.z, FACE.right], [BW.front - R2.front, BW.l, (R2.front + BW.front) / 2, FACE.left]]) {
+    const m = add(new THREE.PlaneGeometry(w, BW_H), wallBMat, x, BW_MID.y, z, scene, false)
+    m.rotation.y = ry
+    blockers.push(m)
+  }
+  // neon stripe along the side walls, the wing's signature
+  const neonPink = std('#2a0f1e', 0.4, 0, { emissive: new THREE.Color('#ff4f9a'), emissiveIntensity: 1.6 })
+  const neonCyan = std('#0b1d2a', 0.4, 0, { emissive: new THREE.Color('#4fd8ff'), emissiveIntensity: 1.4 })
+  add(new THREE.BoxGeometry(0.04, 0.06, BW_D - 0.4), neonPink, BW.r - 0.03, BW.floor + 3.1, BW_MID.z, scene, false)
+  add(new THREE.BoxGeometry(0.04, 0.04, BW_D - 0.4), neonCyan, BW.r - 0.03, BW.floor + 2.95, BW_MID.z, scene, false)
+  add(new THREE.BoxGeometry(BW_W - 0.4, 0.06, 0.04), neonPink, BW_MID.x, BW.floor + 3.1, BW.back + 0.03, scene, false)
+  // the arch from the ballpark: casing on both faces and a sign over it on the ballpark side
+  for (const [x, ry] of [[R2.r, FACE.right], [R2.r, FACE.left]]) {
+    const arch = group(x, R2.floor, (BW_OPEN[0] + BW_OPEN[1]) / 2, ry)
+    const ow = BW_OPEN[1] - BW_OPEN[0]
+    for (const [w, h, ax, ay] of [[ow + 0.2, 0.12, 0, BW_OPEN_H + 0.06], [0.12, BW_OPEN_H + 0.12, -(ow / 2 + 0.05), (BW_OPEN_H + 0.12) / 2], [0.12, BW_OPEN_H + 0.12, ow / 2 + 0.05, (BW_OPEN_H + 0.12) / 2]])
+      add(new THREE.BoxGeometry(w, h, 0.1), frameMat, ax, ay, 0.05, arch)
+  }
+  const bwSign = add(new THREE.PlaneGeometry(2.2, 0.3), labelMat('LANES  →', { color: '#ff6fae', w: 768, h: 104 }), R2.r - 0.02, R2.floor + BW_OPEN_H + 0.5, (BW_OPEN[0] + BW_OPEN[1]) / 2, scene, false)
+  bwSign.rotation.y = FACE.right
+  bwSign.material.emissiveIntensity = 1.1
+
+  // lanes: maple bed flush with the floor from the foul line through the pin deck, half-pipe gutters,
+  // cappings between them, wooden approaches back toward the riser
+  const laneM = std('#ffffff', 0.28, 0.05, { map: canvasTex(256, 2048, drawLane) })
+  const approachM = std('#ffffff', 0.4, 0.05, { map: canvasTex(256, 512, drawApproach) })
+  const bedM = std('#3a2a1c', 0.7, 0.05)
+  const gutterM = std('#30343f', 0.3, 0.7, { side: THREE.DoubleSide })
+  const capM = std('#1b1726', 0.45, 0.35)
+  const BED_L = DECK_END - LANE.foul, BED_Z = (LANE.foul + DECK_END) / 2
+  for (const x of LANE.x) {
+    add(new THREE.BoxGeometry(LANE.w, 0.3, BED_L), bedM, x, BW.floor - 0.152, BED_Z, scene, false)
+    const top = add(new THREE.PlaneGeometry(LANE.w, BED_L), laneM, x, BW.floor + 0.001, BED_Z, scene, false)
+    top.rotation.x = -Math.PI / 2
+    blockers.push(top)
+    const ap = add(new THREE.PlaneGeometry(LANE.w + 2 * LANE.gut, LANE.foul - APPROACH_Z), approachM, x, BW.floor + 0.004, (APPROACH_Z + LANE.foul) / 2, scene, false)
+    ap.rotation.x = -Math.PI / 2
+    for (const sx of [-1, 1]) {
+      const gt = add(new THREE.CylinderGeometry(LANE.gut / 2, LANE.gut / 2, BED_L + 1.2, 18, 1, true, -Math.PI / 2, Math.PI), gutterM, x + sx * (LANE.w + LANE.gut) / 2, BW.floor, BED_Z + 0.6, scene, false)
+      gt.rotation.x = Math.PI / 2
+    }
+    add(new THREE.BoxGeometry(LANE.w + 2 * LANE.gut, 0.012, 0.03), std('#1a1010', 0.5, 0, { emissive: new THREE.Color('#ff3b3b'), emissiveIntensity: 0.6 }), x, BW.floor + 0.006, LANE.foul, scene, false) // foul line
+  }
+  for (const x of [LANES_X0 + 0.05, (LANE.x[0] + LANE.x[1]) / 2, (LANE.x[1] + LANE.x[2]) / 2, LANES_X1 - 0.05]) {
+    const w = x === LANES_X0 + 0.05 || x === LANES_X1 - 0.05 ? 0.1 : 2.9 - 2 * GUT_X
+    add(new THREE.BoxGeometry(w, 0.36, BED_L), capM, x, BW.floor - 0.14, BED_Z, scene, false)
+    // kickbacks: the tall side boards around each pin deck
+    add(new THREE.BoxGeometry(w, 1.5, BW.front - (HEAD_Z - 0.9)), std('#120f1a', 0.6, 0.2), x, BW.floor + 0.6, (BW.front + HEAD_Z - 0.9) / 2, scene, false)
+  }
+  // masking unit over the pin decks (with a light strip underneath), pit curtain behind
+  const mask = add(new THREE.PlaneGeometry(LANES_X1 - LANES_X0, BW.ceil - BW.floor - 1.45), std('#ffffff', 0.7, 0, { map: canvasTex(1536, 1024, drawMasking), emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.35 }), (LANES_X0 + LANES_X1) / 2, (BW.ceil + BW.floor + 1.45) / 2, HEAD_Z - 0.9, scene, false)
+  mask.rotation.y = Math.PI
+  mask.material.emissiveMap = mask.material.map
+  blockers.push(mask)
+  add(new THREE.BoxGeometry(LANES_X1 - LANES_X0, 0.06, 0.18), std('#202030', 0.4, 0, { emissive: new THREE.Color('#fff4e0'), emissiveIntensity: 2.4 }), (LANES_X0 + LANES_X1) / 2, BW.floor + 1.42, HEAD_Z - 0.85, scene, false)
+  const curtain = add(new THREE.PlaneGeometry(LANES_X1 - LANES_X0, 1.9), std('#050507', 1, 0), (LANES_X0 + LANES_X1) / 2, BW.floor + 0.6, HEAD_Z + 2.55, scene, false)
+  curtain.rotation.y = Math.PI
+  // lighting: fixtures over the approaches and lanes, a bright wash on the pin decks
+  const bwFixM = std('#202030', 0.4, 0, { emissive: new THREE.Color('#fff1f8'), emissiveIntensity: 2 })
+  const bwLights = []
+  for (const [x, y, z, power, dist] of [[LX, BW.ceil - 0.5, APPROACH_Z + 1.6, 46, 13], [LX, BW.ceil - 0.6, LANE.foul + 6, 40, 14], [LX, BW.ceil - 0.6, LANE.foul + 13, 36, 13], [LX, BW.floor + 1.25, HEAD_Z - 0.3, 30, 7]]) {
+    if (y > BW.floor + 2) add(new THREE.BoxGeometry(LANES_X1 - LANES_X0 - 0.6, 0.05, 0.4), bwFixM, (LANES_X0 + LANES_X1) / 2, BW.ceil - 0.03, z, scene, false)
+    const l = new THREE.PointLight('#fff0f6', power, dist, 1.3)
+    l.position.set(x, y, z)
+    scene.add(l)
+    bwLights.push([l, power])
+  }
+
+  // pins: turned profile with two red neck stripes. Lanes 1 and 3 keep a static rack; lane 2's pins are live.
+  const pinGeo = new THREE.LatheGeometry([[0, 0], [0.044, 0], [0.07, 0.04], [0.095, 0.11], [0.104, 0.197], [0.097, 0.27], [0.072, 0.35], [0.047, 0.42], [0.04, 0.45], [0.047, 0.52], [0.056, 0.585], [0.05, 0.625], [0.03, 0.65], [0, 0.656]].map(([r, y]) => new THREE.Vector2(r, y)), 24)
+  const pinM = std('#f6f3ec', 0.3, 0.05), stripeM = std('#c8202c', 0.4, 0)
+  const stripeGeo = new THREE.CylinderGeometry(0.0445, 0.0475, 0.018, 20, 1, true)
+  const makePin = () => {
+    const p = new THREE.Group()
+    const body = new THREE.Mesh(pinGeo, pinM)
+    body.castShadow = true
+    p.add(body)
+    for (const y of [0.43, 0.462]) { const s = new THREE.Mesh(stripeGeo, stripeM); s.position.y = y; p.add(s) }
+    scene.add(p)
+    return p
+  }
+  for (const i of [0, 2]) for (const [dx, dz] of PIN_SPOTS) makePin().position.set(LANE.x[i] + dx, BW.floor, HEAD_Z + dz)
+  const pins = PIN_SPOTS.map(([dx, dz], i) => ({
+    n: i + 1, g: makePin(), home: new THREE.Vector3(LX + dx, BW.floor, HEAD_Z + dz),
+    p: new THREE.Vector3(), v: new THREE.Vector2(), tilt: 0, tiltV: 0, fall: new THREE.Vector2(1, 0), yaw: 0, yawV: 0,
+    wob: 0, wobT: 0, falling: false, gone: false, sweep: false, y: 0,
+  }))
+
+  // the house ball: marbled blue with three finger holes
+  const bowlBall = add(new THREE.SphereGeometry(BOWL_R, 40, 28), std('#ffffff', 0.18, 0.25, { map: canvasTex(512, 256, drawBowlingBall) }), LX, BW.floor + BOWL_R, BOWLER_Z0)
+
+  // crowd riser behind the approaches, with a rail in front
+  const RISER = { x0: LANE.x[0] - 1.6, x1: LANE.x[2] + 1.6, z0: BW.back, z1: BW.back + 2.3, h: 0.36 }
+  add(new THREE.BoxGeometry(RISER.x1 - RISER.x0, RISER.h, RISER.z1 - RISER.z0), std('#1c1830', 0.9, 0), (RISER.x0 + RISER.x1) / 2, BW.floor + RISER.h / 2, (RISER.z0 + RISER.z1) / 2, scene, false)
+  add(new THREE.BoxGeometry(RISER.x1 - RISER.x0, 0.03, 0.05), neonCyan, (RISER.x0 + RISER.x1) / 2, BW.floor + RISER.h - 0.03, RISER.z1 + 0.005, scene, false)
+  const railM = std('#3a3f52', 0.3, 0.8)
+  add(new THREE.CylinderGeometry(0.035, 0.035, RISER.x1 - RISER.x0, 12), railM, (RISER.x0 + RISER.x1) / 2, BW.floor + RISER.h + 1.05, RISER.z1 - 0.12, scene).rotation.z = Math.PI / 2
+  for (let x = RISER.x0 + 0.3; x < RISER.x1; x += 1.45) add(new THREE.CylinderGeometry(0.025, 0.025, 1.05, 8), railM, x, BW.floor + RISER.h + 0.52, RISER.z1 - 0.12, scene)
+
+  // ball returns between the lanes (the one beside lane 2 also starts a game)
+  const bowlKit = new THREE.Group()
+  bowlKit.userData.kind = 'bowl'
+  scene.add(bowlKit)
+  const RETURN_Z = BOWLER_Z0 - 1.6
+  const houseCols = ['#e0457b', '#ffb547', '#3cc8a0', '#8c6bff', '#f0f4ff']
+  for (const [k, x] of [[0, (LANE.x[0] + LANE.x[1]) / 2], [1, (LANE.x[1] + LANE.x[2]) / 2]]) {
+    const r = group(x, BW.floor, RETURN_Z, 0, bowlKit)
+    add(rbox(0.66, 0.62, 0.9, 0.12), std('#262036', 0.4, 0.4), 0, 0.31, 0.55, r)
+    add(new THREE.BoxGeometry(0.5, 0.05, 0.6), neonPink, 0, 0.64, 0.55, r, false)
+    for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 10), railM, sx * 0.17, 0.52, -0.15, r).rotation.x = Math.PI / 2
+    for (let i = 0; i < 3; i++) add(new THREE.SphereGeometry(BOWL_R, 24, 16), std(houseCols[(i + k * 2) % 5], 0.2, 0.25), 0, 0.6, -0.95 + i * 0.38, r)
+  }
+  // overhead monitor above lane 2: lane number, frame and score
+  const lcdC = document.createElement('canvas')
+  lcdC.width = 640; lcdC.height = 280
+  const lcdTex = new THREE.CanvasTexture(lcdC)
+  lcdTex.colorSpace = THREE.SRGBColorSpace
+  let bowlBest = 0
+  try { bowlBest = +localStorage.getItem('wos_bowl_best') || 0 } catch { /* storage blocked */ }
+  function drawLcd(l2 = '', l3 = '') {
+    const g = lcdC.getContext('2d'), W = lcdC.width, H = lcdC.height
+    const bg = g.createLinearGradient(0, 0, 0, H)
+    bg.addColorStop(0, '#13183a'); bg.addColorStop(1, '#0a0c1e')
+    g.fillStyle = bg; g.fillRect(0, 0, W, H)
+    g.strokeStyle = 'rgba(255,79,154,0.7)'; g.lineWidth = 5; g.strokeRect(10, 10, W - 20, H - 20)
+    g.textAlign = 'center'
+    g.save(); g.shadowColor = '#ff4f9a'; g.shadowBlur = 20; g.fillStyle = '#ff8cc0'
+    g.font = 'italic 800 64px "JetBrains Mono", monospace'
+    g.fillText('LANE 2', W / 2, 92)
+    g.restore()
+    g.fillStyle = '#f0f4ff'; g.font = '600 30px "JetBrains Mono", monospace'
+    g.fillText(l2 || 'CLICK TO BOWL · 10 FRAMES', W / 2, 168)
+    g.fillStyle = '#4fd8ff'; g.font = '600 26px "JetBrains Mono", monospace'
+    g.fillText(l3 || (bowlBest ? `HIGH GAME  ${bowlBest}` : 'DRAG BACK · SWING FORWARD'), W / 2, 226)
+    lcdTex.needsUpdate = true
+  }
+  drawLcd()
+  // hung over the foul line, high enough to sit above the lane camera's view of the pins
+  const LCD_Y = 4.75, toCeil = BW_H - LCD_Y
+  const lcd = group(LX, BW.floor + LCD_Y, LANE.foul - 1.4, Math.PI, bowlKit)
+  add(rbox(2.3, 1.04, 0.1, 0.03), frameMat, 0, 0, -0.05, lcd)
+  add(new THREE.PlaneGeometry(2.2, 0.962), new THREE.MeshBasicMaterial({ map: lcdTex, toneMapped: false }), 0, 0, 0.002, lcd, false)
+  for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.015, 0.015, toCeil - 0.52, 6), railM, sx * 0.9, (toCeil + 0.52) / 2, -0.05, lcd, false)
+  // glowing spot on the approach: stand here and click to bowl
+  const laneSpot = add(new THREE.RingGeometry(0.62, 0.68, 64), new THREE.MeshBasicMaterial({ color: '#ff4f9a', transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false }), LX, BW.floor + 0.012, BOWLER_Z0, scene, false)
+  laneSpot.rotation.x = -Math.PI / 2
+  // aim guide on the lane while lining up a throw
+  const aimArrow = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([[-0.09, 0], [0.09, 0], [0.09, 2.2], [0.22, 2.2], [0, 2.75], [-0.22, 2.2], [-0.09, 2.2]].map(([x, y]) => new THREE.Vector2(x, y)))),
+    new THREE.MeshBasicMaterial({ color: '#4fd8ff', transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }))
+  aimArrow.rotation.x = Math.PI / 2 // shape's +y points down the lane (+z)
+  aimArrow.visible = false
+  aimArrow.renderOrder = 3
+  scene.add(aimArrow)
+
+  // ---------- avatars: one stylised body (22, athletic, dark hair, full beard), dressed per outfit ----------
+  const AV = {
+    torso: new THREE.CylinderGeometry(0.33, 0.29, 0.86, 28),
+    dome: new THREE.SphereGeometry(0.33, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    hips: new THREE.SphereGeometry(0.27, 20, 14),
+    neck: new THREE.CylinderGeometry(0.09, 0.1, 0.2, 14),
+    head: new THREE.SphereGeometry(0.235, 28, 20),
+    hair: new THREE.SphereGeometry(0.252, 28, 12, 0, Math.PI * 2, 0, Math.PI * 0.47),
+    beard: new THREE.SphereGeometry(0.246, 28, 12, Math.PI * 0.5 - 1.5, 3.0, Math.PI * 0.56, Math.PI * 0.38),
+    burn: new THREE.BoxGeometry(0.035, 0.11, 0.07),
+    stache: new THREE.CapsuleGeometry(0.02, 0.1, 3, 8),
+    eye: new THREE.SphereGeometry(0.032, 12, 10),
+    pupil: new THREE.SphereGeometry(0.018, 10, 8),
+    brow: new THREE.BoxGeometry(0.085, 0.022, 0.02),
+    nose: new THREE.SphereGeometry(0.04, 12, 10),
+    ear: new THREE.SphereGeometry(0.05, 12, 10),
+    mouth: new THREE.BoxGeometry(0.075, 0.016, 0.01),
+    shoulder: new THREE.SphereGeometry(0.115, 16, 12),
+    upper: new THREE.CapsuleGeometry(0.088, 0.36, 4, 12),
+    sleeve: new THREE.CylinderGeometry(0.11, 0.105, 0.24, 14),
+    fore: new THREE.CapsuleGeometry(0.077, 0.32, 4, 12),
+    hand: new THREE.SphereGeometry(0.085, 14, 10),
+    thigh: new THREE.CapsuleGeometry(0.118, 0.48, 4, 12),
+    shin: new THREE.CapsuleGeometry(0.096, 0.46, 4, 12),
+    shoe: rbox(0.19, 0.12, 0.36, 0.05),
+    crown: new THREE.SphereGeometry(0.255, 24, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    brim: new THREE.CylinderGeometry(0.2, 0.2, 0.018, 24, 1, false, -Math.PI / 2, Math.PI),
+    shades: new THREE.BoxGeometry(0.1, 0.055, 0.02),
+    hood: new THREE.TorusGeometry(0.17, 0.075, 10, 24, Math.PI * 1.2),
+    lei: new THREE.TorusGeometry(0.2, 0.04, 8, 28),
+  }
+  const skinM = std('#c4946d', 0.7, 0), hairM = std('#1b130d', 0.95, 0)
+  const eyeWM = std('#f4f2ee', 0.4, 0), pupilM = std('#15100c', 0.3, 0), lipM = std('#7a3a30', 0.7, 0)
+  // outfits: torso texture painter + trousers/shoes + extras. The player wears the tee.
+  const OUTFITS = {
+    player: { tex: drawTeePlayer, base: '#24345e', sleeve: 'short', pants: '#1c1f2b', shoes: '#e8e8ee' },
+    suit: { tex: drawSuit, base: '#2c2f38', sleeve: 'long', pants: '#2c2f38', shoes: '#0d0d10' },
+    flannel: { tex: drawFlannel, base: '#9e2f27', sleeve: 'long', pants: '#34507a', shoes: '#5a3a22', plaidArms: true },
+    beach: { tex: drawBeach, base: '#1fa3a0', sleeve: 'short', pants: '#cdb68a', shorts: true, shoes: '#c7a36a', shades: true, lei: true },
+    orioles: { tex: drawOrioles, base: '#df4601', sleeve: 'short', pants: '#2f4a75', shoes: '#151515', cap: ['#121212', '#df4601'] },
+    lightning: { tex: drawLightning, base: '#002868', sleeve: 'long', pants: '#22324f', shoes: '#f0f0f0', armStripe: '#ffffff' },
+    purdue: { tex: drawPurdue, base: '#111114', sleeve: 'long', pants: '#16161a', shoes: '#cfb991', hood: true, armStripe: '#cfb991' },
+  }
+  function makeAvatar(key) {
+    const o = OUTFITS[key]
+    const root = new THREE.Group(), body = new THREE.Group()
+    root.add(body)
+    const part = (geo, mat, x, y, z, parent = body) => {
+      const m = new THREE.Mesh(geo, mat)
+      m.position.set(x, y, z)
+      m.castShadow = true
+      parent.add(m)
+      return m
+    }
+    const shirtM = std('#ffffff', 0.75, 0, { map: canvasTex(512, 256, o.tex) })
+    const baseM = o.plaidArms ? shirtM : std(o.base, 0.75, 0)
+    const pantsM = std(o.pants, 0.8, 0), shoeM = std(o.shoes, 0.5, 0.05)
+    const build = key === 'player' ? 1.24 : 1.16 // the player is the athletic one: broader through the chest
+    const torso = part(AV.torso, shirtM, 0, 2.03, 0)
+    torso.scale.set(build, 1, 0.62)
+    torso.rotation.y = Math.PI // texture centre (u = 0.5) faces +z
+    part(AV.dome, baseM, 0, 2.459, 0).scale.set(build, 0.42, 0.62)
+    part(AV.hips, pantsM, 0, 1.47, 0).scale.set(1.12, 0.62, 0.66)
+    part(AV.neck, skinM, 0, 2.55, 0)
+    // head: skin, short dark hair swept back, full beard with sideburns, face
+    const head = new THREE.Group()
+    head.position.set(0, 2.83, 0)
+    body.add(head)
+    part(AV.head, skinM, 0, 0, 0, head).scale.set(1, 1.07, 1)
+    part(AV.hair, hairM, 0, 0.012, -0.012, head).rotation.x = -0.36
+    part(AV.beard, hairM, 0, -0.004, 0.004, head).scale.set(1.03, 1.08, 1.05)
+    for (const sx of [-1, 1]) {
+      part(AV.burn, hairM, sx * 0.226, -0.02, 0.03, head)
+      part(AV.ear, skinM, sx * 0.232, 0, -0.01, head).scale.set(0.5, 1, 0.8)
+      part(AV.eye, eyeWM, sx * 0.083, 0.035, 0.205, head)
+      part(AV.pupil, pupilM, sx * 0.083, 0.035, 0.232, head)
+      const b = part(AV.brow, hairM, sx * 0.085, 0.098, 0.218, head)
+      b.rotation.z = sx * -0.12
+    }
+    part(AV.nose, skinM, 0, -0.025, 0.238, head).scale.set(0.9, 1.1, 0.9)
+    part(AV.stache, hairM, 0, -0.078, 0.236, head).rotation.z = Math.PI / 2
+    const mouth = part(AV.mouth, lipM, 0, -0.112, 0.248, head)
+    if (o.shades) for (const sx of [-1, 1]) part(AV.shades, pupilM, sx * 0.083, 0.038, 0.238, head)
+    if (o.cap) {
+      part(AV.crown, std(o.cap[0], 0.8, 0), 0, 0.03, -0.01, head).rotation.x = -0.18
+      const brim = part(AV.brim, std(o.cap[1], 0.8, 0), 0, 0.07, 0.17, head)
+      brim.rotation.x = -0.12
+    }
+    if (o.hood) part(AV.hood, baseM, 0, 2.47, -0.1).rotation.set(Math.PI / 2 - 0.35, 0, Math.PI * -0.1)
+    if (o.lei) {
+      const lei = part(AV.lei, std('#ff6fae', 0.8, 0, { emissive: new THREE.Color('#ff6fae'), emissiveIntensity: 0.15 }), 0, 2.43, 0.03)
+      lei.rotation.x = Math.PI / 2 - 0.25
+    }
+    // arms hang from the shoulder joints; elbows and hands are child groups so poses chain
+    const arm = (sx) => {
+      part(AV.shoulder, baseM, sx * 0.4, 2.31, 0)
+      const sh = new THREE.Group()
+      sh.position.set(sx * 0.42, 2.32, 0)
+      body.add(sh)
+      part(AV.upper, o.sleeve === 'short' ? skinM : baseM, 0, -0.24, 0, sh)
+      if (o.sleeve === 'short') part(AV.sleeve, baseM, 0, -0.08, 0, sh)
+      if (o.armStripe) part(AV.sleeve, std(o.armStripe, 0.7, 0), 0, -0.32, 0, sh).scale.set(0.83, 0.25, 0.83)
+      const el = new THREE.Group()
+      el.position.y = -0.5
+      sh.add(el)
+      part(AV.fore, o.sleeve === 'long' ? baseM : skinM, 0, -0.2, 0, el)
+      const hand = part(AV.hand, skinM, 0, -0.45, 0, el)
+      return { sh, el, hand }
+    }
+    const leg = (sx) => {
+      const hp = new THREE.Group()
+      hp.position.set(sx * 0.17, 1.42, 0)
+      body.add(hp)
+      part(AV.thigh, pantsM, 0, -0.33, 0, hp)
+      const kn = new THREE.Group()
+      kn.position.y = -0.68
+      hp.add(kn)
+      part(AV.shin, o.shorts ? skinM : pantsM, 0, -0.3, 0, kn)
+      part(AV.shoe, shoeM, 0, -0.64, 0.06, kn)
+      return { hp, kn }
+    }
+    // facing +z the avatar's right side is -x
+    const av = { root, body, head, mouth, armR: arm(-1), armL: arm(1), legR: leg(-1), legL: leg(1) }
+    scene.add(root)
+    return av
+  }
+  // pose: arms [raise forward, spread out, elbow bend]; legs [raise forward, knee bend]
+  function setPose(av, { aR = [0, 0.08, 0.1], aL = [0, 0.08, 0.1], lR = [0, 0], lL = [0, 0], bob = 0, lean = 0, headX = 0, headY = 0, spin = 0, gasp = 0 } = {}) {
+    av.armR.sh.rotation.set(-aR[0], 0, -aR[1]); av.armR.el.rotation.x = -aR[2]
+    av.armL.sh.rotation.set(-aL[0], 0, aL[1]); av.armL.el.rotation.x = -aL[2]
+    av.legR.hp.rotation.x = -lR[0]; av.legR.kn.rotation.x = lR[1]
+    av.legL.hp.rotation.x = -lL[0]; av.legL.kn.rotation.x = lL[1]
+    av.body.position.y = bob
+    av.body.rotation.set(lean, spin, 0)
+    av.head.rotation.set(headX, headY, 0)
+    av.mouth.scale.set(1 - gasp * 0.45, 1 + gasp * 5, 1)
+  }
+  // the bowler (you) and the crowd: clones of the same body in six outfits
+  const bowler = makeAvatar('player')
+  bowler.root.position.set(LX, BW.floor, BOWLER_Z0)
+  setPose(bowler)
+  const CROWD_KEYS = ['suit', 'flannel', 'orioles', 'beach', 'lightning', 'purdue']
+  const crowd = CROWD_KEYS.map((k, i) => {
+    const av = makeAvatar(k)
+    const x = LANE.x[0] - 0.6 + i * ((LANE.x[2] - LANE.x[0] + 1.2) / (CROWD_KEYS.length - 1))
+    av.root.position.set(x, BW.floor + RISER.h, CROWD_Z + (i % 2) * 0.25)
+    av.root.rotation.y = (LX - x) * 0.05 // turned slightly toward lane 2
+    av.ph = i * 1.37
+    setPose(av)
+    return av
+  })
+
   // ---------- windows + the scenes outside ----------
   // each window is a click target: a close-up framing that brings the scene outside to life
   const windowGroups = [windowFrame('left', 'Nighthawks'), windowFrame('right', 'The Starry Night')]
@@ -718,10 +1072,14 @@ async function init() {
   const pressed = new Set()
   // floor-plan obstacles the walker slides around: boxes [x0, z0, x1, z1] and posts [x, z, r]
   const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, R2.back, HOOP_X + 0.5, R2.back + 0.62],
-    [PLATE_X - 0.42, PLATE_Z + MOUND_DIST - 0.4, PLATE_X + 0.42, PLATE_Z + MOUND_DIST + 0.45]]
-  // walkable floor: the two rooms plus the doorway passage between them, each [x0, z0, x1, z1]
+    [PLATE_X - 0.42, PLATE_Z + MOUND_DIST - 0.4, PLATE_X + 0.42, PLATE_Z + MOUND_DIST + 0.45],
+    [RISER.x0, RISER.z0, RISER.x1, RISER.z1], // crowd riser
+    ...[(LANE.x[0] + LANE.x[1]) / 2, (LANE.x[1] + LANE.x[2]) / 2].map((x) => [x - 0.33, RETURN_Z - 0.9, x + 0.33, RETURN_Z + 1.0])] // ball returns
+  // walkable floor: the rooms, the doorway passage, the bowling wing up to the foul line and the arch
+  // into it, each [x0, z0, x1, z1]
   const AREAS = [[ROOM.l, ROOM.back, ROOM.r, ROOM.front], [R2.l, R2.back, R2.r, R2.front],
-    [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1]]
+    [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1],
+    [BW.l, BW.back, BW.r, LANE.foul], [R2.r - 1, BW_OPEN[0], BW.l + 1, BW_OPEN[1]]]
   const inRoom2 = (p) => p.z > ROOM.front + WALL_T / 2
   const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42]]
   function collide(p) {
@@ -770,7 +1128,7 @@ async function init() {
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector2()
   const pointers = new Map()
-  const pickables = [computer, sw, ball, derbyKit, ...windowGroups, ...posters]
+  const pickables = [computer, sw, ball, derbyKit, bowlKit, ...windowGroups, ...posters]
   const rayTargets = [...pickables, ...blockers]
   let drag = null, hoverKind = null, hoverPoster = null
   // lightsOn: the switch's "up" position = bright room lights; off is the dim base mood
@@ -842,8 +1200,10 @@ async function init() {
     if (focusOn) return unfocus()
     if (kind === 'ball' && !held) return grab()
     if (kind === 'derby') return enterDerby()
+    if (kind === 'bowl') return enterBowl()
     if (kind === 'window') { if (held) drop(); return focusPoster(o) }
     if (!kind && onPlate()) return enterDerby() // standing on home plate: click to bat
+    if (!kind && onLane()) return enterBowl() // standing on the lane 2 spot: click to bowl
     if (!kind && tooFar && !focusOn) return say('Walk closer', 1.4)
     if (kind === 'computer' && !on && typeof window.boot === 'function') {
       // never boot on the click that captured the mouse, a double-click, or a first stray tap
@@ -857,6 +1217,7 @@ async function init() {
   stage.addEventListener('pointerdown', (e) => {
     if (booting) return
     if (derby) { if (e.button === 0 || e.pointerType !== 'mouse') derbyPointer(e, true); return }
+    if (bowl) { if (e.button === 0 || e.pointerType !== 'mouse') bowlPointer(e, 'down'); return }
     if (e.pointerType === 'mouse' && LOCKABLE) {
       if (e.button !== 0) return
       if (aiming()) {
@@ -874,6 +1235,7 @@ async function init() {
   })
   stage.addEventListener('pointermove', (e) => {
     if (derby) return derbyPointer(e, false)
+    if (bowl) return bowlPointer(e, 'move')
     if (aiming() && e.pointerType === 'mouse') {
       if (focusOn || booting) return
       // clamp spikes some browsers report when the pointer is captured
@@ -896,6 +1258,7 @@ async function init() {
     if (!LOCKABLE) setHover(booting ? null : pick(e.clientX, e.clientY))
   })
   const release = (e) => {
+    if (bowl) return bowlPointer(e, 'up')
     if (charge && charge.src === 'pointer' && (e.pointerType !== 'mouse' || e.button === 0)) {
       releaseShot()
       if (!pointers.has(e.pointerId)) return
@@ -910,7 +1273,7 @@ async function init() {
     if (wasClick && !booting && !derby) act(pick(e.clientX, e.clientY), e.pointerType !== 'mouse')
   }
   stage.addEventListener('pointerup', release)
-  stage.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging'); if (charge) releaseShot() })
+  stage.addEventListener('pointercancel', (e) => { if (bowl) bowlPointer(e, 'cancel'); pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging'); if (charge) releaseShot() })
   stage.addEventListener('pointerleave', () => { if (!drag && !aiming()) setHover(null) })
   // the view's zoom is fixed: the wheel does nothing in the room
   stage.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
@@ -920,6 +1283,15 @@ async function init() {
   const MOVE = { KeyW: 'KeyW', ArrowUp: 'KeyW', KeyS: 'KeyS', ArrowDown: 'KeyS', KeyA: 'KeyA', ArrowLeft: 'KeyA', KeyD: 'KeyD', ArrowRight: 'KeyD' }
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && derby) { e.preventDefault(); return exitDerby() }
+    if (e.key === 'Escape' && bowl) { e.preventDefault(); return exitBowl() }
+    if (bowl && roomLive() && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // bowling: ← → / A D turn the aim, M mutes; nothing walks
+      const turn = { ArrowLeft: 1, KeyA: 1, ArrowRight: -1, KeyD: -1 }[e.code]
+      if (turn && bowl.phase === 'aim') { e.preventDefault(); bowl.aim = THREE.MathUtils.clamp(bowl.aim + turn * 0.006, -0.05, 0.05) }
+      else if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.5; say(muted ? 'Sound off' : 'Sound on', 1) }
+      else if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault()
+      return
+    }
     if (e.key === 'Escape' && freeLook) return unlockLook()
     if (e.key === 'Escape' && focusOn) return unfocus()
     if (!roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
@@ -959,6 +1331,7 @@ async function init() {
   addEventListener('pagehide', () => {
     resetInput()
     if (derby) exitDerby(true)
+    if (bowl) exitBowl(true)
     unlockLook()
     me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
     cancelAnimationFrame(raf)
@@ -1116,7 +1489,7 @@ async function init() {
     derbyHud.innerHTML = `<span><b>Home Run Derby</b></span><span>Swing <b>${n}/${SWINGS}</b></span><span>HR <b>${hrs}</b></span>${p}`
   }
   function enterDerby() {
-    if (derby || booting || on) return
+    if (derby || bowl || booting || on) return
     if (held) drop()
     unfocus()
     unlockLook()
@@ -1341,6 +1714,764 @@ async function init() {
     if (!d.swing) batPivot.position.y += ((ZONE.y0 + ZONE.y1) / 2 + 0.05 - batPivot.position.y) * Math.min(1, dt * 4)
   }
 
+  // ---------- bowling: ten frames on lane 2 ----------
+  // overlay: scoreboard, big result banner, title card, replay tag, results card, exit button
+  const mkEl = (cls, attrs = {}) => {
+    const d = document.createElement('div')
+    d.className = cls
+    for (const k in attrs) d.setAttribute(k, attrs[k])
+    bootEl.append(d)
+    return d
+  }
+  const scoreEl = mkEl('bowl-score', { 'aria-label': 'Bowling scoreboard' })
+  const bannerEl = mkEl('bowl-banner', { 'aria-live': 'assertive' })
+  const introEl = mkEl('bowl-intro', { 'aria-hidden': 'true' })
+  introEl.innerHTML = '<div class="ribbon"><h2>WALKER LANES</h2><p>10 frames · drag back · swing forward · let go</p></div>'
+  const replayEl = mkEl('bowl-replay', { 'aria-hidden': 'true' })
+  replayEl.textContent = 'Replay'
+  const bowlSum = mkEl('derby-sum bowl-sum', { role: 'dialog', 'aria-label': 'Bowling results' })
+  const bowlExit = document.createElement('button')
+  bowlExit.type = 'button'
+  bowlExit.className = 'room-back'
+  bowlExit.textContent = '← Exit bowling'
+  bootEl.append(bowlExit)
+  bowler.root.visible = false
+
+  // sound: everything synthesised (no files). The context starts on the click that opens the lane.
+  let actx = null, master = null, rollGain = null, noiseBuf = null, muted = false
+  function ensureAudio() {
+    if (actx) { if (actx.state === 'suspended') actx.resume().catch(() => {}); return }
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) return
+    try { actx = new AC() } catch { return }
+    master = actx.createGain()
+    master.gain.value = muted ? 0 : 0.5
+    master.connect(actx.destination)
+    noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate)
+    const d = noiseBuf.getChannelData(0)
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
+    // the ball's roll: looping noise through a low-pass, its level follows the ball
+    const src = actx.createBufferSource()
+    src.buffer = noiseBuf
+    src.loop = true
+    const lp = actx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 170
+    rollGain = actx.createGain()
+    rollGain.gain.value = 0
+    src.connect(lp).connect(rollGain).connect(master)
+    src.start()
+  }
+  function noiseHit({ dur = 0.2, freq = 1200, q = 1, type = 'bandpass', gain = 0.5, attack = 0.003, sweep = 0, at = 0 }) {
+    if (!actx) return
+    const t0 = actx.currentTime + at
+    const src = actx.createBufferSource()
+    src.buffer = noiseBuf
+    const f = actx.createBiquadFilter()
+    f.type = type
+    f.frequency.setValueAtTime(freq, t0)
+    if (sweep) f.frequency.linearRampToValueAtTime(Math.max(40, freq + sweep), t0 + dur)
+    f.Q.value = q
+    const g = actx.createGain()
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(gain, t0 + attack)
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    src.connect(f).connect(g).connect(master)
+    src.start(t0, Math.random() * 1.5)
+    src.stop(t0 + dur + 0.05)
+  }
+  function tone(freq, dur, { type = 'triangle', gain = 0.22, at = 0, slide = 0 } = {}) {
+    if (!actx) return
+    const t0 = actx.currentTime + at
+    const o = actx.createOscillator(), g = actx.createGain()
+    o.type = type
+    o.frequency.setValueAtTime(freq, t0)
+    if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t0 + dur)
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    o.connect(g).connect(master)
+    o.start(t0)
+    o.stop(t0 + dur + 0.05)
+  }
+  let lastClack = 0
+  const sfx = {
+    clack(s) { // pin on pin / ball on pin
+      if (!actx || actx.currentTime - lastClack < 0.018) return
+      lastClack = actx.currentTime
+      noiseHit({ dur: 0.08 + s * 0.12, freq: 1800 + Math.random() * 1800, q: 3, gain: 0.12 + 0.4 * s })
+      tone(600 + Math.random() * 600, 0.05, { type: 'square', gain: 0.03 + 0.05 * s })
+    },
+    crash() { for (let i = 0; i < 5; i++) noiseHit({ dur: 0.4, freq: 1300 + i * 450, q: 1.1, gain: 0.3, at: i * 0.03 }) },
+    cheer() { noiseHit({ dur: 2.4, freq: 1000, q: 0.6, gain: 0.32, attack: 0.3 }); noiseHit({ dur: 1.8, freq: 2400, q: 1.5, gain: 0.12, attack: 0.2, at: 0.1 }) },
+    clap() { for (let i = 0; i < 14; i++) noiseHit({ dur: 0.05, freq: 1500 + Math.random() * 900, q: 1.2, gain: 0.2, at: i * 0.09 + Math.random() * 0.04 }) },
+    aww() { noiseHit({ dur: 1.5, freq: 620, q: 4, gain: 0.3, attack: 0.2, sweep: -300 }); tone(220, 1.2, { type: 'sine', gain: 0.05, slide: 0.7 }) },
+    gasp() { noiseHit({ dur: 0.55, freq: 2400, q: 0.7, type: 'highpass', gain: 0.4, attack: 0.05 }) },
+    strike() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, { at: i * 0.08 })) },
+    spare() { [659, 784, 988].forEach((f, i) => tone(f, 0.26, { at: i * 0.1 })) },
+    gutter() { tone(147, 0.3, { type: 'sine', gain: 0.3, slide: 0.7 }); tone(110, 0.5, { type: 'sine', gain: 0.25, at: 0.22, slide: 0.6 }) },
+    whoosh() { noiseHit({ dur: 0.5, freq: 400, q: 0.8, gain: 0.25, attack: 0.15, sweep: 2400 }) },
+    thud() { noiseHit({ dur: 0.25, freq: 120, q: 1, type: 'lowpass', gain: 0.5 }) },
+  }
+
+  // scoring: rolls → marks (with the roll each came from) and running totals, standard ten-pin rules
+  const mk = (n) => (n === 0 ? '-' : String(n))
+  function scoreGame(rolls) {
+    const frames = []
+    let i = 0, total = 0, pending = false
+    for (let f = 0; f < 10; f++) {
+      const fr = { marks: [], total: null }
+      const r = (k) => rolls[i + k]
+      if (f < 9) {
+        if (r(0) === undefined) { fr.marks = [{ t: '' }, { t: '' }]; frames.push(fr); continue }
+        if (r(0) === 10) {
+          fr.marks = [{ t: '' }, { t: 'X', c: 'x', roll: i }]
+          if (!pending && r(2) !== undefined) fr.total = total += 10 + r(1) + r(2)
+          else pending = true
+          i += 1
+        } else {
+          const spare = r(1) !== undefined && r(0) + r(1) === 10
+          fr.marks = [{ t: mk(r(0)), roll: i }, r(1) === undefined ? { t: '' } : spare ? { t: '/', c: 's', roll: i + 1 } : { t: mk(r(1)), roll: i + 1 }]
+          if (r(1) === undefined || (spare && r(2) === undefined)) pending = true
+          else if (!pending) fr.total = total += r(0) + r(1) + (spare ? r(2) : 0)
+          i += 2
+        }
+      } else {
+        const [a, b, c] = [r(0), r(1), r(2)]
+        const m = [{ t: '' }, { t: '' }, { t: '' }]
+        if (a !== undefined) m[0] = a === 10 ? { t: 'X', c: 'x', roll: i } : { t: mk(a), roll: i }
+        if (b !== undefined) m[1] = a === 10 ? (b === 10 ? { t: 'X', c: 'x', roll: i + 1 } : { t: mk(b), roll: i + 1 }) : a + b === 10 ? { t: '/', c: 's', roll: i + 1 } : { t: mk(b), roll: i + 1 }
+        if (c !== undefined) m[2] = a === 10 && b !== 10 ? (b + c === 10 ? { t: '/', c: 's', roll: i + 2 } : { t: mk(c), roll: i + 2 }) : c === 10 ? { t: 'X', c: 'x', roll: i + 2 } : { t: mk(c), roll: i + 2 }
+        fr.marks = m
+        const done = c !== undefined || (b !== undefined && a + b < 10)
+        if (done && !pending) fr.total = total += a + b + (c ?? 0)
+      }
+      frames.push(fr)
+    }
+    return { frames, total }
+  }
+  function renderScore() {
+    if (!bowl) return
+    const { frames, total } = scoreGame(bowl.rolls)
+    scoreEl.innerHTML = '<div class="nm">WALKER</div>' + frames.map((f, i) =>
+      `<div class="fr${i === 9 ? ' t' : ''}${i === bowl.frame && bowl.phase !== 'summary' ? ' cur' : ''}"><div class="n">${i + 1}</div>` +
+      `<div class="m">${f.marks.map((m) => `<span class="${m.c || ''}${m.roll !== undefined && bowl.info[m.roll]?.split ? ' sp' : ''}">${m.t}</span>`).join('')}</div>` +
+      `<div class="tot">${f.total ?? ''}</div></div>`).join('') +
+      `<div class="fr sum"><div class="n">Total</div><div class="tot">${total}</div></div>`
+    drawLcd(`FRAME ${Math.min(bowl.frame + 1, 10)} · BALL ${bowl.ballN + 1}`, `SCORE  ${total}`)
+  }
+  // a split: head pin down and the pins left standing fall into separate groups (neighbours on the
+  // rack, or one straight behind another, count as together)
+  function isSplit(standing) {
+    if (standing[0]) return false
+    const up = standing.map((s, i) => (s ? i : -1)).filter((i) => i >= 0)
+    if (up.length < 2) return false
+    const near = (a, b) => {
+      const [ax, az] = PIN_SPOTS[a], [bx, bz] = PIN_SPOTS[b]
+      const d = Math.hypot(ax - bx, az - bz)
+      return d < 0.6 || (Math.abs(ax - bx) < 0.05 && d < 0.95)
+    }
+    const seen = new Set([up[0]]), stack = [up[0]]
+    while (stack.length) { const a = stack.pop(); for (const b of up) if (!seen.has(b) && near(a, b)) { seen.add(b); stack.push(b) } }
+    return seen.size < up.length
+  }
+
+  // pins: base position p on the deck, sliding velocity v, tilt toward fall (radians), wobble
+  const Y_UP = new THREE.Vector3(0, 1, 0), pinAxis = new THREE.Vector3(), pinYawQ = new THREE.Quaternion()
+  const pinStanding = (q) => !q.gone && !q.pit && !q.falling && q.tilt < 0.4 && Math.abs(q.p.x - LX) < LANE.w / 2 + 0.02
+  // a pin's footprint is a segment from its base toward the fall direction (its body as it tips over),
+  // sampled at base, middle and head; points along it move with the base plus the tipping swing
+  const PIN_LEN = 0.6, FS = [0, 0.5, 1]
+  const pinPt = (q, f, out) => { const L = Math.sin(q.tilt) * PIN_LEN * f; return out.set(q.p.x + q.fall.x * L, q.p.z + q.fall.y * L) }
+  const pinVel = (q, f, out) => { const w = q.tiltV * Math.cos(q.tilt) * PIN_LEN * f; return out.set(q.v.x + q.fall.x * w, q.v.y + q.fall.y * w) }
+  const pinC = (q, out) => pinPt(q, 0.5, out)
+  function placePin(q) {
+    q.g.position.set(q.p.x, BW.floor + q.y + Math.sin(q.tilt) * 0.1, q.p.z)
+    pinAxis.set(q.fall.y, 0, -q.fall.x)
+    q.g.quaternion.setFromAxisAngle(pinAxis, q.tilt).multiply(pinYawQ.setFromAxisAngle(Y_UP, q.yaw))
+  }
+  function resetPin(q, show) {
+    q.p.copy(q.home)
+    q.v.set(0, 0)
+    q.tilt = q.tiltV = q.wob = q.wobT = q.yawV = q.y = 0
+    q.yaw = Math.random() * 6.28
+    q.falling = q.pit = q.inGut = q.down = false
+    q.gone = !show
+    q.g.visible = show
+    placePin(q)
+  }
+  // knock: a standing pin given speed either wobbles (and may stay up) or starts to topple
+  function knock(q) {
+    if (q.down || q.falling || q.pit) return
+    const s = q.v.length()
+    if (s > 0.7 || (s > 0.42 && Math.random() < 0.55)) {
+      q.falling = true
+      q.fall.set(q.v.x, q.v.y).normalize()
+      q.tiltV = 1.2 + s * 0.7
+      q.wob = 0
+      q.yawV = (Math.random() - 0.5) * (4 + s)
+    } else if (s > 0.12 && !q.wob) {
+      q.wob = Math.min(0.24, s * 0.4)
+      q.wobT = 0
+      q.fall.set(q.v.x, q.v.y).normalize()
+    }
+  }
+  for (const q of pins) resetPin(q, true)
+  const cA = new THREE.Vector2(), cB = new THREE.Vector2()
+  function pinStep(h) {
+    for (const q of pins) {
+      if (q.gone) continue
+      q.p.x += q.v.x * h
+      q.p.z += q.v.y * h
+      q.v.multiplyScalar(Math.exp(-(q.down ? 3.4 : 1.7) * h))
+      q.yaw += q.yawV * h
+      q.yawV *= Math.exp(-2.5 * h)
+      if (q.falling) {
+        q.tiltV += 15 * Math.sin(Math.max(q.tilt, 0.08)) * h
+        q.tilt += q.tiltV * h
+        if (q.tilt >= 1.47) { q.tilt = 1.47; q.tiltV = 0; q.falling = false; q.down = true; sfx.clack(0.25) }
+      } else if (q.wob) {
+        q.wobT += h
+        q.tilt = q.wob * Math.abs(Math.sin(q.wobT * 12)) * Math.exp(-q.wobT * 3.2)
+        if (q.wobT > 1.3) { q.wob = 0; q.tilt = 0 }
+      }
+      // kickbacks either side of the deck; off the deck edge into the gutter; off the back into the pit
+      const dx = q.p.x - LX
+      if (Math.abs(dx) > GUT_X - PIN_R) { q.p.x = LX + Math.sign(dx) * (GUT_X - PIN_R); q.v.x *= -0.45; sfx.clack(0.3) }
+      if (!q.inGut && Math.abs(dx) > LANE.w / 2 + 0.03) {
+        q.inGut = true
+        q.y = -0.13
+        if (!q.down && !q.falling) { q.falling = true; q.fall.set(Math.sign(dx), 0.3).normalize(); q.tiltV = 2 }
+      }
+      if (!q.pit && q.p.z > DECK_END) q.pit = true
+      if (q.pit) { q.y -= 3 * h; if (q.y < -0.8) { q.gone = true; q.g.visible = false } }
+    }
+    for (let i = 0; i < 10; i++) for (let j = i + 1; j < 10; j++) {
+      const a = pins[i], b = pins[j]
+      if (a.gone || b.gone || a.pit || b.pit) continue
+      // nearest pair of sample points on the two pins (a standing pin is just its base)
+      let best = 1e9, fa = 0, fb = 0
+      for (const f of a.tilt > 0.05 ? FS : FS.slice(0, 1)) for (const g of b.tilt > 0.05 ? FS : FS.slice(0, 1)) {
+        pinPt(a, f, cA); pinPt(b, g, cB)
+        const dd = (cB.x - cA.x) ** 2 + (cB.y - cA.y) ** 2
+        if (dd < best) { best = dd; fa = f; fb = g }
+      }
+      const d = Math.sqrt(best)
+      if (d >= 2 * PIN_R || d < 1e-6) continue
+      pinPt(a, fa, cA); pinPt(b, fb, cB)
+      const nx = (cB.x - cA.x) / d, nz = (cB.y - cA.y) / d, push = (2 * PIN_R - d) / 2
+      a.p.x -= nx * push; a.p.z -= nz * push; b.p.x += nx * push; b.p.z += nz * push
+      pinVel(a, fa, cA); pinVel(b, fb, cB)
+      const rv = (cB.x - cA.x) * nx + (cB.y - cA.y) * nz
+      if (rv < 0) {
+        const imp = (-(1 + 0.6) * rv) / 2
+        a.v.x -= imp * nx; a.v.y -= imp * nz; b.v.x += imp * nx; b.v.y += imp * nz
+        knock(a); knock(b)
+        sfx.clack(Math.min(1, imp / 3))
+      }
+    }
+  }
+
+  // the ball on the lane: skids, then hooks in the back third; drops into a gutter if it leaves the boards
+  const bv2 = new THREE.Vector3(), bAxis = new THREE.Vector3()
+  function laneBallStep(h) {
+    const b = bowl.ball, p = bowlBall.position
+    if (b.state === 'roll') {
+      const hookK = THREE.MathUtils.smoothstep(p.z, LANE.foul + LANE.len * 0.5, LANE.foul + LANE.len * 0.8)
+      bv2.x += b.spin * 1.8 * (b.v0 / 10) ** 2 * hookK * h // slow balls have longer to hook, so they bite less hard
+      bv2.z = Math.max(1.2, bv2.z - 0.12 * h)
+      p.addScaledVector(bv2, h)
+      if (Math.abs(p.x - LX) > LANE.w / 2 && p.z > LANE.foul - 0.2) {
+        b.state = 'gutter'
+        b.gutX = LX + Math.sign(p.x - LX) * (LANE.w + LANE.gut) / 2
+        if (!b.hitAny) sfx.gutter()
+      }
+      // the pins
+      for (const q of pins) {
+        if (q.gone || q.pit) continue
+        let best = 1e9, fb = 0
+        for (const f of q.tilt > 0.05 ? FS : FS.slice(0, 1)) { pinPt(q, f, cA); const dd = (cA.x - p.x) ** 2 + (cA.y - p.z) ** 2; if (dd < best) { best = dd; fb = f } }
+        pinPt(q, fb, cA)
+        const dx = cA.x - p.x, dz = cA.y - p.z, d = Math.hypot(dx, dz), R = BOWL_R + PIN_R
+        if (d >= R || d < 1e-6) continue
+        const nx = dx / d, nz = dz / d
+        q.p.x += nx * (R - d); q.p.z += nz * (R - d)
+        const rv = (q.v.x - bv2.x) * nx + (q.v.y - bv2.z) * nz
+        if (rv < 0) {
+          const imp = (-(1 + 0.6) * rv) / (1 / 7 + 1 / 1.5)
+          bv2.x -= (imp * nx) / 7; bv2.z -= (imp * nz) / 7
+          q.v.x += (imp * nx) / 1.5 + (Math.random() - 0.5) * 0.5
+          q.v.y += (imp * nz) / 1.5
+          if (q.v.length() > 9) q.v.setLength(9)
+          knock(q)
+          if (!b.hitAny) { b.hitAny = true; sfx.crash() }
+          sfx.clack(1)
+        }
+      }
+    } else if (b.state === 'gutter') {
+      p.x += (b.gutX - p.x) * Math.min(1, h * 14)
+      p.y += (BW.floor - 0.01 - p.y) * Math.min(1, h * 14)
+      bv2.x = 0
+      p.z += bv2.z * h
+    }
+    if ((b.state === 'roll' || b.state === 'gutter') && p.z > DECK_END + 0.3) { b.state = 'pit'; b.pitT = bowl.t; sfx.thud() }
+    if (b.state === 'pit') { p.y -= 2.5 * h; p.z += bv2.z * 0.4 * h; if (p.y < BW.floor - 0.9) bowlBall.visible = false }
+    const sp = Math.hypot(bv2.x, bv2.z)
+    if (sp > 1e-3 && b.state !== 'pit') { bAxis.set(bv2.z, 0, -bv2.x).divideScalar(sp); bowlBall.rotateOnWorldAxis(bAxis, (sp * h) / BOWL_R) }
+  }
+  // released during the backswing: the ball sails back toward the crowd
+  function backBallStep(h) {
+    const p = bowlBall.position
+    bv2.y -= 12 * h
+    p.addScaledVector(bv2, h)
+    if (p.y < BW.floor + BOWL_R) { p.y = BW.floor + BOWL_R; if (bv2.y < -1) sfx.thud(); bv2.y = Math.abs(bv2.y) > 1 ? -bv2.y * 0.3 : 0; bv2.x *= 0.8; bv2.z *= 0.8 }
+    if (p.z < RISER.z1 + BOWL_R + 0.02) { p.z = RISER.z1 + BOWL_R + 0.02; bv2.z = Math.abs(bv2.z) * 0.25; sfx.thud() }
+    bv2.x *= Math.exp(-0.8 * h); bv2.z *= Math.exp(-0.8 * h)
+    const sp = Math.hypot(bv2.x, bv2.z)
+    if (sp > 1e-3) { bAxis.set(bv2.z, 0, -bv2.x).divideScalar(sp); bowlBall.rotateOnWorldAxis(bAxis, (sp * h) / BOWL_R) }
+  }
+
+  // replay: every frame of the roll is recorded (ball + pins), then played back slowed down
+  const REC_STRIDE = 8 * 11
+  function snapshot() {
+    if (bowl.rec.length > 520) return
+    const a = new Float32Array(REC_STRIDE)
+    const put = (o, k) => { a.set([o.position.x, o.position.y, o.position.z, o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w, o.visible ? 1 : 0], k * 8) }
+    put(bowlBall, 0)
+    pins.forEach((q, i) => put(q.g, i + 1))
+    bowl.rec.push({ t: bowl.t, a })
+  }
+  function applySnap(a) {
+    const get = (o, k) => { o.position.set(a[k * 8], a[k * 8 + 1], a[k * 8 + 2]); o.quaternion.set(a[k * 8 + 3], a[k * 8 + 4], a[k * 8 + 5], a[k * 8 + 6]); o.visible = a[k * 8 + 7] > 0.5 }
+    get(bowlBall, 0)
+    pins.forEach((q, i) => get(q.g, i + 1))
+  }
+
+  let bowl = null, bowlAmt = 0, bannerUntil = 0
+  const bcPos = new THREE.Vector3(), bcLook = new THREE.Vector3(), bcPosT = new THREE.Vector3(), bcLookT = new THREE.Vector3()
+  const handW = new THREE.Vector3()
+  const onLane = () => Math.hypot(me.p.x - LX, me.p.z - BOWLER_Z0) < 0.9
+  function showBanner(kind, text, dur = 1.9) {
+    const letters = [...text].map((c, i) => `<span style="animation-delay:${i * 45}ms">${c === ' ' ? '&nbsp;' : c}</span>`).join('')
+    bannerEl.className = `bowl-banner show ${kind}`
+    bannerEl.innerHTML = `<div class="rays"></div><div class="bw-t bw-o" aria-hidden="true">${letters}</div><div class="bw-t bw-f">${letters}</div>`
+    bannerUntil = bowl.t + dur
+  }
+  function holdBall() {
+    bowl.ball = { state: 'held', spin: 0, hitAny: false }
+    bowlBall.visible = true
+    bv2.set(0, 0, 0)
+  }
+  function newRack(full) {
+    for (const q of pins) resetPin(q, full ? true : pinStanding(q))
+    bowl.rack = pins.map((q) => !q.gone)
+  }
+  function enterBowl() {
+    if (bowl || derby || booting || on) return
+    if (held) drop()
+    unfocus()
+    unlockLook()
+    resetInput()
+    ensureAudio()
+    // park the walker just behind the approach, facing the pins, so leaving is seamless
+    me.p.set(LX - 1.7, WALK.eye, BOWLER_Z0 - 1.3)
+    me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
+    const turns = Math.round((cur.yaw - Math.PI) / (Math.PI * 2))
+    tgt.yaw = Math.PI + turns * Math.PI * 2
+    tgt.pitch = 0
+    bowl = { phase: 'intro', t: 0, rolls: [], info: [], frame: 0, ballN: 0, bx: 0, aim: 0, z: BOWLER_Z0, rack: [], streak: 0, rec: [], react: null, reactT: 0, crowd: 'idle', crowdT: 0, sw: null, ball: null }
+    for (const q of pins) resetPin(q, true)
+    bowl.rack = pins.map(() => true)
+    holdBall()
+    bowler.root.visible = true
+    bowlSum.classList.remove('show')
+    stage.classList.add('bowl')
+    scoreEl.classList.add('show')
+    bowlExit.classList.add('show')
+    introEl.classList.add('show')
+    renderScore()
+    sfx.whoosh()
+    bcPos.set(LX, BW.floor + 0.9, HEAD_Z - 2.2)
+    bcLook.set(LX, BW.floor + 0.35, HEAD_Z + 0.6)
+  }
+  function exitBowl(silent = false) {
+    if (!bowl) return
+    bowl = null
+    stage.classList.remove('bowl', 'swinging')
+    for (const el of [scoreEl, bowlExit, introEl, replayEl, bowlSum, bannerEl]) el.classList.remove('show')
+    bowler.root.visible = false
+    aimArrow.visible = false
+    for (const q of pins) resetPin(q, true)
+    bowlBall.visible = true
+    bowlBall.position.set(LX, BW.floor + BOWL_R, BOWLER_Z0)
+    if (rollGain) rollGain.gain.value = 0
+    for (const av of crowd) setPose(av)
+    drawLcd()
+    if (!silent) say(LOCKABLE ? 'Click to look around' : 'Back in the room', 2)
+  }
+  bowlExit.addEventListener('click', () => exitBowl())
+  bowlSum.addEventListener('click', (e) => {
+    const a = e.target.closest('button')?.dataset.a
+    if (a === 'again') { exitBowl(true); enterBowl() }
+    else if (a === 'exit') exitBowl()
+  })
+
+  // mouse/touch while bowling: hover lines up, press-drag-release swings
+  function bowlPointer(e, type) {
+    if (!bowl) return
+    const r = stage.getBoundingClientRect()
+    const nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height
+    const now = performance.now() / 1000
+    if (type === 'down') {
+      ensureAudio()
+      if (bowl.phase === 'intro') { bowl.t = Math.max(bowl.t, 2.6); return }
+      if (bowl.phase !== 'aim') return
+      bowl.phase = 'swing'
+      bowl.swT = 0
+      bowl.sw = { y0: ny, x0: nx, x: nx, th: 0, samples: [{ t: now, th: 0, x: nx }] }
+      stage.classList.add('swinging')
+      try { stage.setPointerCapture(e.pointerId) } catch { /* pointer already gone */ }
+    } else if (type === 'move') {
+      if (bowl.phase === 'aim' && e.pointerType === 'mouse') bowl.bx = THREE.MathUtils.clamp((0.5 - nx) * 2.2, -0.7, 0.7)
+      else if (bowl.phase === 'swing') {
+        const s = bowl.sw
+        s.th = THREE.MathUtils.clamp((s.y0 - ny) * 7, -2.0, 2.3)
+        s.x = nx
+        s.samples.push({ t: now, th: s.th, x: nx })
+        while (s.samples.length > 2 && now - s.samples[0].t > 0.14) s.samples.shift()
+      }
+    } else if (bowl.phase === 'swing') releaseBowl(type === 'cancel')
+  }
+  function releaseBowl(cancel = false) {
+    const s = bowl.sw
+    stage.classList.remove('swinging')
+    const now = performance.now() / 1000
+    const old = s.samples.find((q) => now - q.t <= 0.1) || s.samples[0]
+    const span = Math.max(0.03, now - old.t)
+    const w = (s.th - old.th) / span, lat = (s.x - old.x) / span
+    if (cancel || (Math.abs(s.th) < 0.3 && Math.abs(w) < 1.2)) {
+      bowl.phase = 'aim'
+      bowl.z = BOWLER_Z0
+      return say(COARSE ? 'Drag down, then swing up and let go' : 'Drag down to wind up, then swing up and let go', 2.4)
+    }
+    const hand = bowler.armR.hand.getWorldPosition(handW)
+    bowl.rec = []
+    if (s.th < -0.25 && w < 2.5) {
+      // let go mid-backswing: it flies back at the crowd
+      bowl.phase = 'oops'
+      bowl.ball.state = 'back'
+      bowlBall.position.set(hand.x, Math.max(BW.floor + BOWL_R, hand.y - 0.1), hand.z - 0.1)
+      bv2.set((Math.random() - 0.5) * 1.2, 2.6 + Math.min(2, -w * 0.2), -(5.2 + Math.min(4, Math.abs(w) * 0.6)))
+      bowl.crowd = 'egg'
+      bowl.crowdT = 0
+      bowl.react = 'oops'
+      bowl.reactT = 0
+      return
+    }
+    const speed = THREE.MathUtils.clamp(2.6 + w * 0.6, 3.2, 13.5)
+    const ang = bowl.aim + THREE.MathUtils.clamp((s.x - s.x0) * -0.06, -0.025, 0.025) + (Math.random() - 0.5) * 0.012
+    bowl.ball.state = 'roll'
+    bowl.ball.v0 = speed
+    bowl.ball.spin = THREE.MathUtils.clamp(-lat * 0.9, -1.2, 1.2)
+    bowl.ball.hitAny = false
+    // the arm swings slightly in toward the body's centre line, so the ball leaves a little inside the hand
+    const relX = bowler.root.position.x - 0.25 * Math.cos(bowl.aim)
+    bowlBall.position.set(THREE.MathUtils.clamp(relX, LX - LANE.w / 2 + 0.05, LX + LANE.w / 2 - 0.05), BW.floor + BOWL_R, Math.min(hand.z + 0.15, LANE.foul - 0.1))
+    bv2.set(Math.sin(ang) * speed, 0, Math.cos(ang) * speed)
+    bowl.phase = 'roll'
+    bowl.rollT = 0
+    bowl.settleT = 0
+    bowl.react = 'follow'
+    bowl.reactT = 0
+    bowl.crowd = 'watch'
+    say(`${Math.round(speed * 1.3)} mph${Math.abs(bowl.ball.spin) > 0.25 ? ` · ${bowl.ball.spin > 0 ? 'hook left' : 'hook right'}` : ''}`, 1.6)
+    sfx.thud()
+  }
+
+  // after the pins settle: count, score, react, then replay / sweep / next ball
+  function resolveRoll() {
+    const standing = pins.map((q) => bowl.rack[pins.indexOf(q)] && pinStanding(q))
+    const down = bowl.rack.filter((r, i) => r && !standing[i]).length
+    const first = bowl.frame < 9 ? bowl.ballN === 0 : bowl.rack.every(Boolean) // a full rack in front of you
+    const cleared = standing.every((s) => !s)
+    const split = first && !cleared && isSplit(standing)
+    const gutter = bowl.ball.state === 'pit' && !bowl.ball.hitAny && down === 0
+    bowl.rolls.push(down)
+    bowl.info.push({ split })
+    let kind = 'open'
+    if (cleared && first) kind = 'strike'
+    else if (cleared) kind = 'spare'
+    bowl.streak = kind === 'strike' ? bowl.streak + 1 : 0
+    if (kind === 'strike') {
+      const names = ['', 'STRIKE!', 'DOUBLE!', 'TURKEY!']
+      showBanner('strike', names[bowl.streak] || `${bowl.streak}-BAGGER!`, 2.2)
+      sfx.strike(); sfx.cheer()
+      bowl.crowd = 'cheer'
+    } else if (kind === 'spare') {
+      showBanner('spare', 'SPARE!', 2.0)
+      sfx.spare(); sfx.clap()
+      bowl.crowd = 'clap'
+    } else if (gutter) {
+      showBanner('gutter', 'GUTTER', 1.6)
+      sfx.aww()
+      bowl.crowd = 'aww'
+    } else if (split) {
+      showBanner('split', 'SPLIT', 1.6)
+      bowl.crowd = 'aww'
+      sfx.aww()
+    } else say(down === 0 ? 'No pins' : `${down} pin${down === 1 ? '' : 's'}`, 1.4)
+    bowl.react = kind === 'strike' ? 'strike' : kind === 'spare' ? 'spare' : gutter ? 'gutter' : split ? 'split' : 'open'
+    bowl.reactT = 0
+    bowl.crowdT = 0
+    // what comes next
+    const r = bowl.rolls, f = bowl.frame
+    let nextFrame = false, fullRack = false, over = false
+    if (f < 9) {
+      if (kind === 'strike' || bowl.ballN === 1) { nextFrame = true; fullRack = true }
+    } else {
+      const fr = r.slice(r.length - bowl.ballN - 1)
+      if (bowl.ballN === 0) fullRack = kind === 'strike'
+      else if (bowl.ballN === 1) { if (fr[0] + fr[1] < 10) over = true; else fullRack = cleared }
+      else over = true
+    }
+    bowl.next = { nextFrame, fullRack, over }
+    bowl.phase = (kind === 'strike' || kind === 'spare') && bowl.rec.length > 20 ? 'celebrate' : 'result'
+    bowl.until = bowl.t + (bowl.phase === 'celebrate' ? 2.0 : 1.9)
+    renderScore()
+  }
+  function startReplay() {
+    const rec = bowl.rec
+    let i0 = rec.findIndex((s) => s.a[2] > HEAD_Z - 5.5)
+    if (i0 < 0) i0 = 0
+    bowl.replay = { i0, t0: rec[i0].t, t: rec[i0].t, end: rec[rec.length - 1].t }
+    bowl.phase = 'replay'
+    replayEl.classList.add('show')
+    sfx.whoosh()
+  }
+  function afterResult() {
+    const n = bowl.next
+    if (n.over) return showBowlSummary()
+    bowl.phase = 'sweep'
+    bowl.until = bowl.t + 1.1
+    bowl.sweepFull = n.fullRack
+    if (n.nextFrame) { bowl.frame++; bowl.ballN = 0 } else bowl.ballN++
+  }
+  function finishSweep() {
+    newRack(bowl.sweepFull)
+    holdBall()
+    bowl.z = BOWLER_Z0
+    bowl.phase = 'aim'
+    bowl.react = null
+    bowl.crowd = 'idle'
+    renderScore()
+  }
+  function showBowlSummary() {
+    bowl.phase = 'summary'
+    const { total, frames } = scoreGame(bowl.rolls)
+    const count = (t) => frames.reduce((k, f) => k + f.marks.filter((m) => m.t === t).length, 0)
+    const strikes = count('X'), spares = count('/')
+    if (total > bowlBest) { bowlBest = total; try { localStorage.setItem('wos_bowl_best', String(total)) } catch { /* storage blocked */ } }
+    bowlSum.innerHTML = `<h3>Game over</h3><div class="big">${total}</div>` +
+      `<p style="margin:0 0 14px;color:var(--text-dim)">Strikes <b style="color:var(--text)">${strikes}</b> · Spares <b style="color:var(--text)">${spares}</b> · High game <b style="color:var(--text)">${bowlBest}</b></p>` +
+      '<div class="row"><button type="button" data-a="again">Bowl again</button><button type="button" data-a="exit">Back to room</button></div>'
+    bowlSum.classList.add('show')
+    bowlSum.querySelector('button')?.focus({ preventScroll: true })
+    renderScore()
+    drawLcd(`FINAL  ${total}`, `HIGH GAME  ${bowlBest}`)
+  }
+
+  // ---- per-frame: state machine, physics, camera target, the bowler and the crowd ----
+  const ss = THREE.MathUtils.smoothstep
+  function bowlStep(dt, t) {
+    const B_ = bowl
+    B_.t += dt
+    const T = B_.t
+    const p = bowlBall.position
+    if (bannerEl.classList.contains('show') && T > bannerUntil) bannerEl.classList.remove('show')
+    // phases
+    if (B_.phase === 'intro') {
+      if (T > 2.9) { B_.phase = 'aim'; introEl.classList.remove('show'); say(COARSE ? 'Drag down, then swing up and let go' : 'Mouse to line up · ← → to aim · drag down, swing up, let go', 4) }
+    } else if (B_.phase === 'swing') {
+      B_.swT += dt
+      B_.z = Math.min(LANE.foul - 0.75, BOWLER_Z0 + Math.max(0, B_.swT - 0.1) * 2.6)
+    } else if (B_.phase === 'roll') {
+      B_.rollT += dt
+      const n = 6
+      for (let i = 0; i < n; i++) { laneBallStep(dt / n); pinStep(dt / n) }
+      snapshot()
+      const moving = pins.some((q) => !q.gone && !q.pit && (q.v.length() > 0.06 || q.falling || q.wob))
+      const passed = B_.ball.state === 'pit' || p.z > HEAD_Z + 2
+      if (passed) B_.settleT += dt
+      if ((passed && !moving && B_.settleT > 0.8) || B_.settleT > 4.5 || B_.rollT > 12) resolveRoll()
+    } else if (B_.phase === 'oops') {
+      backBallStep(dt)
+      if (B_.crowdT > 3.4) {
+        B_.phase = 'aim'
+        B_.crowd = 'idle'
+        B_.react = null
+        B_.z = BOWLER_Z0
+        holdBall()
+        say('Whoa, wrong way! That one doesn’t count', 2.6)
+      }
+    } else if (B_.phase === 'celebrate' && T > B_.until) startReplay()
+    else if (B_.phase === 'replay') {
+      const R = B_.replay
+      R.t += dt * 0.42
+      let i = R.i0
+      while (i < B_.rec.length - 1 && B_.rec[i + 1].t <= R.t) i++
+      applySnap(B_.rec[i].a)
+      if (R.t >= R.end) { applySnap(B_.rec[B_.rec.length - 1].a); replayEl.classList.remove('show'); B_.phase = 'result'; B_.until = T + 0.6 }
+    } else if (B_.phase === 'result' && T > B_.until) afterResult()
+    else if (B_.phase === 'sweep') {
+      // the sweep bar clears the deadwood back into the pit; standing pins lift and are set back down
+      const k = 1 - (B_.until - T) / 1.1
+      for (const q of pins) {
+        if (q.gone) continue
+        const standing = pinStanding(q) && !B_.sweepFull
+        if (standing) { q.y = Math.sin(Math.min(1, k) * Math.PI) * 0.7; placePin(q) }
+        else { q.p.z += dt * 3.2; q.y -= dt * (k > 0.4 ? 1.6 : 0); placePin(q); if (q.p.z > DECK_END + 0.6) { q.gone = true; q.g.visible = false } }
+      }
+      if (T > B_.until) finishSweep()
+    }
+    if (B_.phase !== 'replay') for (const q of pins) if (!q.gone) placePin(q)
+    // rolling sound follows the ball on the boards
+    if (rollGain && actx) {
+      const rolling = B_.phase === 'roll' && (B_.ball.state === 'roll' || B_.ball.state === 'gutter') ? Math.min(1, Math.hypot(bv2.x, bv2.z) / 10) : 0
+      rollGain.gain.setTargetAtTime(rolling * 0.55, actx.currentTime, 0.05)
+    }
+
+    // ---- the bowler ----
+    const av = bowler
+    av.root.position.set(LX + B_.bx, BW.floor, B_.z)
+    av.root.rotation.y = B_.aim
+    B_.reactT += dt
+    const rt = B_.reactT
+    let pose
+    if (B_.phase === 'swing') {
+      const th = B_.sw.th, step = Math.max(0, B_.swT - 0.1) * 2.6, walking = B_.z < LANE.foul - 0.76
+      const ph = step * 3.2, sw = walking ? Math.sin(ph) * 0.55 : 0
+      const slide = walking ? 0 : 1
+      pose = {
+        aR: [th, 0.1, 0.15 + Math.max(0, -th) * 0.06], aL: [0.3 + slide * 0.3, 0.5 + slide * 0.5, 0.4],
+        lR: walking ? [sw, Math.max(0, -sw) * 0.9] : [-0.55, 0.35], lL: walking ? [-sw, Math.max(0, sw) * 0.9] : [0.95, 1.0],
+        bob: walking ? -Math.abs(Math.sin(ph)) * 0.05 : -0.32, lean: 0.12 + slide * 0.28 + Math.max(0, th) * 0.05,
+      }
+    } else if (B_.react === 'follow' || (B_.phase === 'roll' && !B_.react)) {
+      const k = Math.min(1, rt / 0.25), stand = ss(rt, 1.0, 1.8)
+      pose = {
+        aR: [THREE.MathUtils.lerp(1.0, 2.3, k) * (1 - stand) + stand * 0.25, 0.12, 0.2 + stand * 0.4], aL: [0.6 * (1 - stand), 0.95 * (1 - stand) + 0.12, 0.4],
+        lR: [-0.55 * (1 - stand), 0.35 * (1 - stand)], lL: [0.95 * (1 - stand), 1.0 * (1 - stand)],
+        bob: -0.32 * (1 - stand), lean: 0.4 * (1 - stand), headX: 0.1,
+      }
+    } else if (B_.react === 'strike') {
+      const j = Math.abs(Math.sin(rt * 7))
+      pose = { aR: [2.8, 0.35 + j * 0.2, 0.2], aL: [2.8, 0.35 + j * 0.2, 0.2], lR: [0.1, 0.3 * j], lL: [0.1, 0.3 * j], bob: j * 0.35, headX: -0.25, gasp: 0.8 }
+    } else if (B_.react === 'spare') {
+      const pump = Math.abs(Math.sin(rt * 6))
+      pose = { aR: [1.6 + pump * 0.8, 0.25, 1.9], aL: [0.15, 0.12, 0.3], lL: [0.15, 0.3], bob: pump * 0.06, headX: -0.1, gasp: 0.4 }
+    } else if (B_.react === 'gutter' || B_.react === 'split') {
+      const k = ss(rt, 0, 0.4)
+      pose = B_.react === 'gutter'
+        ? { aR: [2.6 * k, 0.55 * k, 2.4 * k], aL: [2.6 * k, 0.55 * k, 2.4 * k], headX: 0.35 * k, lean: 0.12 * k }
+        : { aR: [0.35, 0.55 * k + Math.sin(rt * 3) * 0.05, 1.5 * k], aL: [0.35, 0.55 * k, 1.5 * k], headY: 0.25 * Math.sin(rt * 2) * k, bob: 0.04 * Math.sin(rt * 5) * k }
+    } else if (B_.react === 'open') {
+      pose = { aR: [0.2, 0.12, 0.4], aL: [0.2, 0.12, 0.4], headX: 0.1 * Math.sin(rt * 6) * Math.max(0, 1 - rt) }
+    } else if (B_.react === 'oops') {
+      const k = ss(rt, 0.15, 0.6)
+      pose = { aR: [-1.6 * (1 - k) + 0.4 * k, 0.6 * k, 1.4 * k], aL: [0.4, 0.6 * k, 1.4 * k], headY: 2.4 * k, headX: -0.1 * k, gasp: k }
+    } else {
+      // lining up: ball held at the chest, cradled by the left hand
+      const br = Math.sin(T * 2.2) * 0.02
+      pose = { aR: [0.55 + br, 0.1, 1.75], aL: [0.6 + br, 0.12, 1.6], bob: br * 0.5 }
+    }
+    setPose(av, pose)
+    // the ball rides in the right hand until it is let go
+    if (B_.ball.state === 'held') {
+      av.root.updateMatrixWorld(true)
+      av.armR.hand.getWorldPosition(handW)
+      p.copy(handW)
+      p.y -= 0.12
+      if (B_.phase !== 'swing') { p.z += 0.18; p.x += 0.12 }
+      p.y = Math.max(p.y, BW.floor + BOWL_R)
+    }
+
+    // ---- the crowd ----
+    B_.crowdT += dt
+    const ct = B_.crowdT
+    if (B_.crowd === 'egg' && ct > 0.7 && !B_.gasped) { B_.gasped = true; sfx.gasp() }
+    if (B_.crowd !== 'egg') B_.gasped = false
+    crowd.forEach((c, i) => {
+      const ph = c.ph, w = T + ph
+      let cp
+      if (B_.crowd === 'cheer') {
+        const j = Math.abs(Math.sin(w * 6.5))
+        cp = { aR: [2.7 + Math.sin(w * 9) * 0.2, 0.35, 0.25], aL: [2.7 + Math.cos(w * 9) * 0.2, 0.35, 0.25], lR: [0, 0.25 * j], lL: [0, 0.25 * j], bob: j * 0.28, gasp: 0.7, headX: -0.15 }
+      } else if (B_.crowd === 'clap') {
+        const cl = Math.abs(Math.sin(w * 13))
+        cp = { aR: [1.25, 0.05 + cl * 0.3, 1.1], aL: [1.25, 0.05 + cl * 0.3, 1.1], bob: Math.abs(Math.sin(w * 3)) * 0.04, gasp: 0.3 }
+      } else if (B_.crowd === 'aww') {
+        const k = ss(ct, 0, 0.5)
+        cp = i % 2 ? { aR: [2.5 * k, 0.6 * k, 2.4 * k], aL: [2.5 * k, 0.6 * k, 2.4 * k], headX: 0.3 * k } : { aR: [0.3, 0.12, 1.6 * k], aL: [0.3, 0.12, 1.6 * k], headX: 0.4 * k, lean: 0.1 * k }
+      } else if (B_.crowd === 'egg') {
+        // everyone at once: a startled jump with a full spin, then hands to faces, mouths open
+        const k = ct - 0.25 - i * 0.015, up = k > 0 && k < 0.85 ? Math.sin((k / 0.85) * Math.PI) : 0
+        const spin = Math.PI * 2 * ss(k, 0, 0.85)
+        const gasp = ss(k, 0.6, 0.9)
+        cp = k < 0.85
+          ? { aR: [2.9 * Math.min(1, Math.max(0, k) * 4), 0.5, 0.2], aL: [2.9 * Math.min(1, Math.max(0, k) * 4), 0.5, 0.2], lR: [0.4 * up, 0.9 * up], lL: [0.4 * up, 0.9 * up], bob: up * 0.75, spin, gasp }
+          : { aR: [2.05, 0.6, 2.55], aL: [2.05, 0.6, 2.55], lean: -0.12 * gasp, gasp: 1, headX: -0.08 }
+      } else {
+        // watching: follow the ball with their heads, idle sway
+        const look = B_.phase === 'roll' ? THREE.MathUtils.clamp(Math.atan2(p.x - c.root.position.x, p.z - c.root.position.z) - c.root.rotation.y, -0.6, 0.6) : 0
+        cp = { aR: [0.12, 0.1, 0.35 + 0.05 * Math.sin(w)], aL: [0.12, 0.1, 0.35 + 0.05 * Math.cos(w)], headY: look + Math.sin(w * 0.4) * 0.12, bob: Math.sin(w * 1.3) * 0.01, spin: Math.sin(w * 0.3) * 0.05 }
+      }
+      setPose(c, cp)
+    })
+
+    // ---- aim guide ----
+    aimArrow.visible = B_.phase === 'aim'
+    if (aimArrow.visible) {
+      aimArrow.material.opacity = 0.35 + 0.2 * Math.sin(T * 4)
+      aimArrow.position.set(LX + B_.bx + Math.sin(B_.aim) * 4.2, BW.floor + 0.01, LANE.foul + 0.6)
+      aimArrow.rotation.z = -B_.aim
+    }
+
+    // ---- camera target ----
+    const lx = LX + B_.bx
+    if (B_.phase === 'intro') {
+      const k = ss(T, 0.15, 2.8)
+      // fly back up the lane from the pins, arcing up and to the side so it clears the bowler's head
+      bcPosT.set(LX + (B_.bx * 0.6 - 0.55) * k + Math.sin(k * Math.PI) * 1.3, BW.floor + 0.9 + k * 3.2 + Math.sin(k * Math.PI) * 1.4, THREE.MathUtils.lerp(HEAD_Z - 2.2, BOWLER_Z0 - 3.4, k))
+      bcLookT.set(LX + (B_.bx * 0.3 - 0.1) * k, BW.floor + 0.35 - k * 0.15, THREE.MathUtils.lerp(HEAD_Z + 0.6, BOWLER_Z0 + 10, k * k))
+      bcPos.copy(bcPosT); bcLook.copy(bcLookT)
+      return
+    }
+    if (B_.phase === 'aim' || B_.phase === 'swing' || B_.phase === 'summary') {
+      bcPosT.set(LX + B_.bx * 0.6 - 0.55, BW.floor + 4.1, B_.z - 3.4)
+      bcLookT.set(LX + B_.bx * 0.3 - 0.1, BW.floor + 0.2, B_.z + 10)
+    } else if (B_.phase === 'roll') {
+      // chase the ball: stay up over the bowler, then drop low as the camera runs down the lane
+      const cz = Math.max(Math.min(p.z - 4.2, HEAD_Z - 5.2), B_.z - 3.4)
+      const u = THREE.MathUtils.clamp((cz - B_.z - 0.6) / 6, 0, 1)
+      bcPosT.set(LX + (p.x - LX) * 0.4 * u + (B_.bx * 0.6 - 0.55) * (1 - u), BW.floor + THREE.MathUtils.lerp(4.1, 1.5, u), cz)
+      bcLookT.set(LX + (p.x - LX) * 0.3, BW.floor + THREE.MathUtils.lerp(0.2, 0.3, u), Math.min(p.z + 5 + (1 - u) * 5, HEAD_Z + 0.7))
+    } else if (B_.phase === 'oops') {
+      bcPosT.set(lx + 2.7, BW.floor + 3.1, B_.z + 3.4)
+      bcLookT.set(LX - 0.4, BW.floor + 1.7, CROWD_Z + 1.2)
+    } else if (B_.phase === 'replay') {
+      const k = (B_.replay.t - B_.replay.t0) / Math.max(0.1, B_.replay.end - B_.replay.t0)
+      bcPosT.set(LX + 1.25 - k * 0.5, BW.floor + 0.7 + k * 0.25, HEAD_Z - 2.1 + k * 0.4)
+      bcLookT.set(LX - 0.1, BW.floor + 0.3, HEAD_Z + 0.6)
+      if (k < 0.02) { bcPos.copy(bcPosT); bcLook.copy(bcLookT) } // cut, don't pan
+    } else {
+      bcPosT.set(LX, BW.floor + 1.4, HEAD_Z - 5.2)
+      bcLookT.set(LX, BW.floor + 0.3, HEAD_Z + 0.7)
+    }
+    const k = 1 - Math.exp(-dt * (B_.phase === 'roll' ? 6 : 3.5))
+    bcPos.lerp(bcPosT, k)
+    bcLook.lerp(bcLookT, k)
+  }
+
   // ---------- power state, mirrored from the existing LED ----------
   let flickerUntil = 0
   const clock = new THREE.Clock()
@@ -1351,6 +2482,7 @@ async function init() {
     booting = true
     unfocus()
     exitDerby(true)
+    exitBowl(true)
     setHover(null)
     resetInput()
     if (held) drop()
@@ -1360,13 +2492,14 @@ async function init() {
   }).observe(ledEl, { attributes: true, attributeFilter: ['class'] })
 
   let zoomT0 = -1
-  // busy(): the room is mid-activity (batting), so keyboard shortcuts must not boot the computer
-  window.WOS3D = { zoom() { if (!REDUCE) zoomT0 = clock.elapsedTime }, busy: () => !!derby }
+  // busy(): the room is mid-activity (batting or bowling), so keyboard shortcuts must not boot the computer
+  window.WOS3D = { zoom() { if (!REDUCE) zoomT0 = clock.elapsedTime }, busy: () => !!derby || !!bowl }
   // ---------- once the desktop takes over: stop, and get out of the way ----------
   let raf = 0
   new MutationObserver(() => {
     if (bootEl.classList.contains('hidden')) {
       exitDerby(true)
+      exitBowl(true)
       resetInput()
       unlockLook()
       me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
@@ -1388,7 +2521,7 @@ async function init() {
   const HOLD = new THREE.Vector3(0.24, -0.23, -0.68) // where the held ball sits, in camera space
   const dummy = new THREE.Object3D()
   const smooth = (k) => k * k * (3 - 2 * k)
-  let shownText = null, glowAmt = 0, frameN = 0
+  let shownText = null, glowAmt = 0, frameN = 0, fogAmt = 0
 
   // solid boxes the ball bounces off: [minX, minY, minZ, maxX, maxY, maxZ]
   const BALL_BOXES = [
@@ -1519,7 +2652,7 @@ async function init() {
       me.v.lerp(wish, 1 - Math.exp(-dt * 6))
     } else {
       wish.set(-sy * iz + cy * ix, 0, -cy * iz - sy * ix)
-      if (derby) wish.set(0, 0, 0)
+      if (derby || bowl) wish.set(0, 0, 0)
       let wishSpeed = 0
       if (wish.lengthSq() > 0) {
         wish.normalize()
@@ -1528,7 +2661,7 @@ async function init() {
       }
       // jump: a press is buffered briefly; holding Space re-jumps on every landing
       me.jumpBuf = Math.max(0, me.jumpBuf - dt)
-      const wantJump = !derby && (me.jumpBuf > 0 || pressed.has('jump'))
+      const wantJump = !derby && !bowl && (me.jumpBuf > 0 || pressed.has('jump'))
       const onGround = me.grounded // the take-off frame still gets ground acceleration, just no friction
       if (me.grounded && wantJump) {
         me.vy = MOVE_PHYS.jump
@@ -1585,6 +2718,16 @@ async function init() {
     // batting view: behind the plate, looking out at the machine
     derbyAmt = THREE.MathUtils.clamp(derbyAmt + (derby ? dt : -dt) / 0.8, 0, 1)
     if (derbyAmt > 0) { const dk = smooth(derbyAmt); pos.lerp(DCAM, dk); look.lerp(DLOOK, dk) }
+    // bowling: the lane camera (intro sweep, behind the bowler, chasing the ball, replays)
+    if (bowl) bowlStep(dt, t)
+    bowlAmt = THREE.MathUtils.clamp(bowlAmt + (bowl ? dt : -dt) / 0.7, 0, 1)
+    if (bowlAmt > 0) { const bk = smooth(bowlAmt); pos.lerp(bcPos, bk); look.lerp(bcLook, bk) }
+    // the fog thins out in the bowling wing so the pins read from the far end of the approach
+    const inWing = pos.x > BW.l - 0.5 && pos.z > BW.back - 0.5 ? 1 : 0
+    fogAmt += (inWing - fogAmt) * Math.min(1, dt * 2)
+    scene.fog.near = 18 + fogAmt * 22
+    scene.fog.far = 48 + fogAmt * 40
+    laneSpot.material.opacity = bowl ? 0 : 0.3 + 0.2 * Math.sin(t * 3)
 
     // dolly into the screen at the end of the boot
     if (zoomT0 >= 0) {
@@ -1675,16 +2818,18 @@ async function init() {
     const enterCue = window.WOS_RESUME ? 'Click the computer to resume' : 'Click the computer to enter'
     const text = on ? null : t < msgUntil ? msg
       : derby ? (derby.phase === 'windup' ? 'Pitch coming…' : derby.phase === 'ready' ? 'Get set…' : null)
+      : bowl ? (bowl.phase === 'aim' ? (COARSE ? 'Drag down, swing up, let go' : 'Drag down · swing up · let go  ·  flick sideways to hook') : null)
       : held ? (COARSE ? 'Hold anywhere, release in the green' : 'Hold R or click · release in the green')
       : hoverKind === 'derby' || onPlate() ? 'Click to bat · Home Run Derby'
+      : hoverKind === 'bowl' || onLane() ? 'Click to bowl · Walker Lanes'
       : hoverKind === 'window' ? 'Click to look closer'
       : hoverKind === 'switch' ? (lightsOn ? 'Click to dim the lights' : 'Click to brighten the room')
       : cueAmt > 0.5 ? enterCue : LOCKABLE && !aiming() && !focusOn && !booting ? 'Click to look around' : null
     if (text && text !== shownText) cueText.textContent = text
     shownText = text
     cueEl.classList.toggle('show', !!text)
-    keysEl.classList.toggle('show', !booting && !on && !derby && focusAmt < 0.5 && (!walked || t - walked < 4))
-    padEl.classList.toggle('show', COARSE && !booting && !on && !derby && focusAmt < 0.5)
+    keysEl.classList.toggle('show', !booting && !on && !derby && !bowl && focusAmt < 0.5 && (!walked || t - walked < 4))
+    padEl.classList.toggle('show', COARSE && !booting && !on && !derby && !bowl && focusAmt < 0.5)
     padEl.classList.toggle('holding', held)
 
     renderer.render(scene, camera) // no post-processing: the scene renders sharp
@@ -1844,17 +2989,27 @@ async function init() {
     const spill = putA(new THREE.PlaneGeometry(8.5, 2.6), glow('rgba(214,232,160,0.62)'), LEN / 2 + 0.4, -1.15, 0.13, PHI, -Math.PI / 2)
     put(new THREE.PlaneGeometry(2.6, 5), glow('rgba(214,232,160,0.45)'), SIDE_X + 1.1, 0.13, ncz - 2.4, 0, -Math.PI / 2)
 
-    // interior: floor, fluorescent ceiling, yellow back wall with the kitchen door
-    const ceilM = flat('#eef1c6')
+    // interior: floor, fluorescent ceiling, yellow back wall with the kitchen door.
+    // Floor and ceiling follow the real outline (front glass, rounded nose, side glass, back wall), set
+    // just inside the base and the band so they never poke out through the glass or flicker against them.
+    const BACK_OFF = 2.9, S_L = -0.6, IN = 0.07
+    const S_BACK = (SIDE_X - P0.x - N.x * BACK_OFF) / D.x // where the back wall meets the side glass
+    const [bcx, bcz] = at(S_BACK, BACK_OFF)
+    const outline = () => {
+      const pts = [at(S_L, IN), at(LEN, IN)]
+      for (let i = 1; i <= 12; i++) { const a = Math.atan2(-N.y, -N.x) * (1 - i / 12); pts.push([ncx + (NOSE_R - IN) * Math.cos(a), ncz + (NOSE_R - IN) * Math.sin(a)]) }
+      pts.push([SIDE_X - IN, bcz], at(S_L, BACK_OFF))
+      return new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z))))
+    }
+    const ceilM = flat('#eef1c6', { side: THREE.DoubleSide })
     const backM = flat('#d4c98c')
-    putA(new THREE.PlaneGeometry(LEN + 1.2, 3.0), flat('#8d7b55'), LEN / 2, 1.45, 0.3, PHI, -Math.PI / 2)
-    putA(new THREE.PlaneGeometry(LEN + 1.2, 3.0), ceilM, LEN / 2, 1.45, 2.3, PHI, Math.PI / 2)
-    putA(new THREE.PlaneGeometry(LEN + 1.2, 2.0), backM, LEN / 2, 2.9, 1.3)
-    putA(new THREE.PlaneGeometry(0.72, 1.55), flat('#a9904a'), 0.9, 2.88, 1.08)
-    putA(new THREE.PlaneGeometry(LEN + 1.2, 0.08), flat('#6b5a35'), LEN / 2, 2.88, 1.95)
-    put(new THREE.PlaneGeometry(3.4, 2.0), backM, SIDE_X - 1.6, 1.3, ncz - 3.3)
+    put(outline(), flat('#8d7b55', { side: THREE.DoubleSide }), 0, 0.3, 0, 0, -Math.PI / 2)
+    put(outline(), ceilM, 0, 2.29, 0, 0, -Math.PI / 2)
+    putA(new THREE.PlaneGeometry(S_BACK - S_L, 2.0), backM, (S_L + S_BACK) / 2, BACK_OFF, 1.3)
+    putA(new THREE.PlaneGeometry(0.72, 1.55), flat('#a9904a'), 0.9, BACK_OFF - 0.02, 1.08)
+    putA(new THREE.PlaneGeometry(S_BACK - S_L, 0.08), flat('#6b5a35'), (S_L + S_BACK) / 2, BACK_OFF - 0.02, 1.95)
     // back counter + urns (metal base, glass upper with coffee inside, domed lids)
-    putA(new THREE.BoxGeometry(LEN, 0.9, 0.42), flat('#857049'), LEN / 2, 2.6, 0.75)
+    putA(new THREE.BoxGeometry(S_BACK - 0.45, 0.9, 0.42), flat('#857049'), (S_BACK - 0.45) / 2, 2.6, 0.75)
     const metal = flat('#c9c3a8'), metalDark = flat('#8f8a76')
     const urnGlass = flat('#efe6c4', { transparent: true, opacity: 0.32, depthWrite: false })
     const urnTops = []
@@ -1868,32 +3023,41 @@ async function init() {
       putA(new THREE.BoxGeometry(0.05, 0.05, 0.1), metalDark, s, 2.32, 1.3)
       urnTops.push(new THREE.Vector3(x, 2.05, z))
     }
-    // the counter: a long run with a rounded end toward the nose
+    // the counter: an L. The long run follows the glass; at the nose end it turns back toward the
+    // urns, and the couple sit at that corner. CORNER is the outer edge of the return leg.
     const wood = flat('#7b4a2b'), top = flat('#cdb27d')
-    putA(new THREE.BoxGeometry(4.7, 0.82, 0.5), wood, 3.15, 1.35, 0.71)
-    putA(new THREE.BoxGeometry(4.8, 0.05, 0.64), top, 3.15, 1.35, 1.14)
+    const CORNER = 5.05, RET_BACK = 2.08
+    putA(new THREE.BoxGeometry(CORNER - 0.8, 0.82, 0.5), wood, (CORNER + 0.8) / 2, 1.35, 0.71)
+    putA(new THREE.BoxGeometry(CORNER - 0.7, 0.05, 0.64), top, (CORNER + 0.7) / 2 + 0.035, 1.35, 1.14)
+    putA(new THREE.BoxGeometry(0.5, 0.82, RET_BACK - 1.1), wood, CORNER - 0.25, (RET_BACK + 1.1) / 2, 0.71)
+    putA(new THREE.BoxGeometry(0.64, 0.05, RET_BACK - 1.03), top, CORNER - 0.25 + 0.07, (RET_BACK + 1.03) / 2, 1.14)
     {
-      const [x, z] = at(5.5, 1.35)
-      put(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 24), top, x, 1.14, z)
-      put(new THREE.CylinderGeometry(0.25, 0.25, 0.82, 24), wood, x, 0.71, z)
+      // rounded caps: the outer corner of the L and the inner end of the return leg
+      for (const [s, off] of [[CORNER - 0.25, RET_BACK], [0.8, 1.35]]) {
+        const [x, z] = at(s, off)
+        put(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 24), top, x, 1.14, z)
+        put(new THREE.CylinderGeometry(0.25, 0.25, 0.82, 24), wood, x, 0.71, z)
+      }
     }
-    // stools: seat top at SEAT
+    // stools: seat top at SEAT. Each is [s, off, facing]: along the run they face the back counter,
+    // round the corner they face back along the glass toward the return leg
     const SEAT = 0.91
-    const STOOLS = [1.2, 1.95, 2.7, 3.45, 4.2, 4.85, 5.45]
-    for (const s of STOOLS) {
-      const [x, z] = at(s, 0.68)
+    const faceRun = PHI, faceRet = PHI + Math.PI / 2
+    const STOOLS = [[1.2, 0.68, faceRun], [1.95, 0.68, faceRun], [2.7, 0.68, faceRun], [3.45, 0.68, faceRun], [3.95, 0.68, faceRun], [4.55, 0.68, faceRun],
+      [CORNER + 0.43, 1.42, faceRet], [CORNER + 0.43, 1.98, faceRet]]
+    for (const [s, off] of STOOLS) {
+      const [x, z] = at(s, off)
       put(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 18), flat('#6c2a22'), x, SEAT - 0.03, z)
       put(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 8), flat('#8f8c80'), x, SEAT - 0.33, z)
       put(new THREE.TorusGeometry(0.1, 0.01, 6, 20), flat('#8f8c80'), x, SEAT - 0.42, z, 0, Math.PI / 2)
     }
     // customers, each centred on a stool: hips on the seat, thighs toward the counter, shins down to
-    // the foot ring, forearms on the counter top. Local -z faces into the diner (toward the counter).
-    const faceIn = PHI
-    const customer = (s, coat, { hat = false, hair = null, skin = '#d8b08a', legs = coat } = {}) => {
-      const [x, z] = at(s, 0.68)
+    // the foot ring, forearms on the counter top. Local -z faces the counter.
+    const customer = ([s, off, face], coat, { hat = false, hair = null, skin = '#d8b08a', legs = coat } = {}) => {
+      const [x, z] = at(s, off)
       const f = new THREE.Group()
       f.position.set(x, 0, z)
-      f.rotation.y = faceIn
+      f.rotation.y = face
       g.add(f)
       const mk = (geo, col, px, py, pz, rx = 0) => {
         const m = new THREE.Mesh(geo, flat(col))
@@ -1916,15 +3080,17 @@ async function init() {
       }
       return f
     }
-    customer(1.95, '#20242c', { hat: true }) // the lone man, back to the street
-    customer(4.2, '#1d2230', { hat: true }) // the man in the dark suit
-    customer(4.85, '#b3261e', { hair: '#9a3c1c', skin: '#e2bd98', legs: '#3a2420' }) // the woman in the red blouse
+    customer(STOOLS[1], '#20242c', { hat: true }) // the lone man, back to the street
+    customer(STOOLS[5], '#1d2230', { hat: true }) // the man in the dark suit, at the corner
+    customer(STOOLS[6], '#b3261e', { hair: '#9a3c1c', skin: '#e2bd98', legs: '#3a2420' }) // the woman in the red blouse, round the bend
 
-    // coffee cups set down in front of each customer as the waiter serves them
-    const CUST = [1.95, 4.2, 4.85]
+    // coffee cups set down in front of each customer as the waiter serves them. CUST: where the waiter
+    // stands to serve (along the aisle, stopping short of the return leg); CUP_AT: the cup on the counter
+    const CUST = [1.95, 4.2, 4.25]
+    const CUP_AT = [[1.95, 1.22], [4.55, 1.22], [CORNER - 0.12, 1.42]]
     const cupM = flat('#f2efe4')
-    const custCups = CUST.map((s) => {
-      const [x, z] = at(s, 1.22)
+    const custCups = CUP_AT.map(([s, off]) => {
+      const [x, z] = at(s, off)
       const c = put(new THREE.CylinderGeometry(0.035, 0.03, 0.08, 12), cupM, x, 1.2, z)
       c.visible = false
       return c
@@ -1958,7 +3124,7 @@ async function init() {
       { act: 'serve', dur: 1.4, face: 'customers' },
       { go: 1.3 },
       { act: 'wait', dur: 0.7, face: 'customers' },
-      { go: 5.3 },
+      { go: 4.25 },
       { act: 'wait', dur: 0.7, face: 'customers' },
       { go: 3.0 },
     ]
@@ -2017,7 +3183,8 @@ async function init() {
     const glassM = flat('#dcebcf', { transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })
     putA(new THREE.PlaneGeometry(LEN, 2.0), glassM, LEN / 2, 0, 1.3)
     put(new THREE.CylinderGeometry(NOSE_R, NOSE_R, 2.0, 24, 1, true, arc0, arcL), glassM, ncx, 1.3, ncz)
-    put(new THREE.PlaneGeometry(3.6, 2.0), glassM, SIDE_X, 1.3, ncz - 1.8, Math.PI / 2)
+    const SIDE_L = ncz - bcz // the side glass runs back only as far as the back wall
+    put(new THREE.PlaneGeometry(SIDE_L, 2.0), glassM, SIDE_X, 1.3, ncz - SIDE_L / 2, Math.PI / 2)
     // base, sill and the dark band above the glass, following the same outline
     const baseM = flat('#4c2018'), band = flat('#203a2f'), trimM = flat('#a8a48e')
     const baseArc = flat('#4c2018', { side: THREE.DoubleSide }), bandArc = flat('#203a2f', { side: THREE.DoubleSide })
@@ -2026,8 +3193,10 @@ async function init() {
     putA(new THREE.BoxGeometry(LEN, 0.42, 0.14), band, LEN / 2, 0, 2.51)
     put(new THREE.CylinderGeometry(NOSE_R + 0.02, NOSE_R + 0.02, 0.3, 24, 1, true, arc0, arcL), baseArc, ncx, 0.15, ncz)
     put(new THREE.CylinderGeometry(NOSE_R + 0.03, NOSE_R + 0.03, 0.42, 24, 1, true, arc0, arcL), bandArc, ncx, 2.51, ncz)
-    put(new THREE.BoxGeometry(0.14, 0.3, 3.6), baseM, SIDE_X, 0.15, ncz - 1.8)
-    put(new THREE.BoxGeometry(0.14, 0.42, 3.6), band, SIDE_X, 2.51, ncz - 1.8)
+    put(new THREE.BoxGeometry(0.14, 0.3, SIDE_L), baseM, SIDE_X, 0.15, ncz - SIDE_L / 2)
+    put(new THREE.BoxGeometry(0.14, 0.42, SIDE_L), band, SIDE_X, 2.51, ncz - SIDE_L / 2)
+    // the building's side wall closes the diner behind the side glass
+    put(new THREE.PlaneGeometry(4, 2.6), flat('#3a1d16'), SIDE_X + 0.01, 1.3, bcz - 2, Math.PI / 2)
     // the Phillies sign on the roof over the nose
     putA(new THREE.PlaneGeometry(2.7, 0.58), flat('#ffffff', { map: canvasTex(1024, 220, drawDinerSign) }), LEN - 1.55, 0.02, 3.05)
     for (const s of [LEN - 2.6, LEN - 0.5]) putA(new THREE.BoxGeometry(0.04, 0.3, 0.04), flat('#2a2a26'), s, 0.06, 2.75)
@@ -2092,14 +3261,16 @@ async function init() {
     skyM.position.set(RX + 15, 1.8, WIN.z)
     skyM.rotation.y = -Math.PI / 2
     g.add(skyM)
+    // the hills stop short of the bowling wing, which sits off to this side of the painted landscape
+    const U1 = BW.back - 0.4 - WIN.z
     const hills = (x, color, base, amp, seed) => {
       const s = new THREE.Shape()
       s.moveTo(-48, -16)
       for (let i = 0; i <= 160; i++) {
-        const u = -48 + (96 * i) / 160
+        const u = -48 + ((48 + U1) * i) / 160
         s.lineTo(u, base + Math.sin(u * 0.45 + seed) * amp + Math.sin(u * 1.3 + seed * 2) * amp * 0.35)
       }
-      s.lineTo(48, -16)
+      s.lineTo(U1, -16)
       const m = new THREE.Mesh(new THREE.ShapeGeometry(s), flat(color))
       m.position.set(x, 0, WIN.z)
       m.rotation.y = -Math.PI / 2
@@ -2821,6 +3992,199 @@ function drawBrick(g, w, h) {
     g.fillStyle = `rgb(${54 + k * 12},${24 + k * 5},${19 + k * 4})`
     g.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3)
   }
+}
+
+// ---------- bowling wing textures ----------
+// maple boards; returns a board-shade function so lanes and approaches share the look
+function woodBoards(g, w, h, boards, light = 0) {
+  const bw = w / boards
+  for (let i = 0; i < boards; i++) {
+    const k = ((i * 37) % 11) / 11
+    g.fillStyle = `rgb(${222 + k * 18 + light},${184 + k * 16 + light},${128 + k * 14 + light})`
+    g.fillRect(i * bw, 0, bw, h)
+    g.fillStyle = 'rgba(90,58,30,0.22)'
+    g.fillRect(i * bw, 0, 1, h)
+  }
+  // long soft grain streaks
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(120,80,40,${0.03 + (i % 5) * 0.012})`
+    g.fillRect((i * 53) % w, (i * 197) % h, 1.5, 40 + (i % 7) * 30)
+  }
+}
+// one lane, foul line at the top of the canvas and the pin deck at the bottom (20.7 units long)
+function drawLane(g, w, h) {
+  const L = LANE.len + 1.7, py = (u) => (u / L) * h, px = (dx) => (0.5 - dx / LANE.w) * w
+  woodBoards(g, w, h, 39)
+  // a gentle oil sheen down the middle of the front two-thirds
+  const sheen = g.createLinearGradient(0, 0, w, 0)
+  sheen.addColorStop(0, 'rgba(255,255,255,0)'); sheen.addColorStop(0.5, 'rgba(255,248,232,0.16)'); sheen.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = sheen; g.fillRect(0, 0, w, py(LANE.len * 0.66))
+  // pin deck: lighter boards with dark pin spots
+  g.fillStyle = 'rgba(255,240,215,0.32)'; g.fillRect(0, py(LANE.len - 0.6), w, h)
+  g.fillStyle = 'rgba(60,40,26,0.55)'
+  for (const [dx, dz] of PIN_SPOTS) { g.beginPath(); g.ellipse(px(dx), py(LANE.len + dz), 7, 5, 0, 0, Math.PI * 2); g.fill() }
+  // guide dots and the seven target arrows (a shallow V, centre arrow furthest)
+  const board = (b) => px((b - 20) * (LANE.w / 39))
+  g.fillStyle = '#2a1a10'
+  for (const b of [3, 5, 8, 11, 14, 26, 29, 32, 35, 37]) { g.beginPath(); g.ellipse(board(b), py(2.2), 3.5, 2.5, 0, 0, Math.PI * 2); g.fill() }
+  for (const b of [5, 10, 15, 20, 25, 30, 35]) {
+    const y = py(4.5 + (1 - Math.abs(b - 20) / 15) * 0.6), x = board(b)
+    g.fillStyle = '#a3174a'
+    g.beginPath(); g.moveTo(x, y + 22); g.lineTo(x - 5, y); g.lineTo(x + 5, y); g.closePath(); g.fill()
+  }
+}
+// approach: boards across lane + gutter widths, a darker border, two rows of stance dots; foul line at the bottom
+function drawApproach(g, w, h) {
+  woodBoards(g, w, h, 48, -10)
+  const edge = (LANE.gut / (LANE.w + 2 * LANE.gut)) * w
+  g.fillStyle = 'rgba(40,24,14,0.35)'; g.fillRect(0, 0, edge, h); g.fillRect(w - edge, 0, edge, h)
+  g.fillStyle = '#2a1a10'
+  for (const d of [1.2, 3.6]) for (const k of [-2, -1, 0, 1, 2]) {
+    g.beginPath(); g.ellipse(w / 2 + k * w * 0.11, h - (d / 7.7) * h, 5, 4, 0, 0, Math.PI * 2); g.fill()
+  }
+}
+// deep navy carpet with scattered neon shapes
+function drawCarpet(g, w, h) {
+  g.fillStyle = '#120f26'; g.fillRect(0, 0, w, h)
+  const cols = ['#ff4f9a', '#4fd8ff', '#ffd36b', '#8c6bff']
+  let s = 7
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647)
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * w, y = rnd() * h, c = cols[i % 4], r = 6 + rnd() * 12
+    g.save(); g.translate(x, y); g.rotate(rnd() * 6.3)
+    g.strokeStyle = c; g.fillStyle = c; g.globalAlpha = 0.5; g.lineWidth = 3
+    const k = i % 4
+    if (k === 0) { g.beginPath(); g.arc(0, 0, r * 0.6, 0, Math.PI * 2); g.stroke() }
+    else if (k === 1) { g.beginPath(); g.moveTo(-r, 0); g.quadraticCurveTo(-r / 2, -r, 0, 0); g.quadraticCurveTo(r / 2, r, r, 0); g.stroke() }
+    else if (k === 2) { g.beginPath(); g.moveTo(0, -r * 0.6); g.lineTo(r * 0.55, r * 0.45); g.lineTo(-r * 0.55, r * 0.45); g.closePath(); g.fill() }
+    else g.fillRect(-r * 0.5, -1.5, r, 3)
+    g.restore()
+  }
+}
+// masking unit over the three pin decks: wordmark, sweeping neon bands, lane numbers over each deck
+function drawMasking(g, w, h) {
+  const bg = g.createLinearGradient(0, 0, 0, h)
+  bg.addColorStop(0, '#07061a'); bg.addColorStop(1, '#1a1040')
+  g.fillStyle = bg; g.fillRect(0, 0, w, h)
+  for (const [c, off] of [['#ff4f9a', 0], ['#4fd8ff', 60], ['#ffd36b', 120]]) {
+    g.strokeStyle = c; g.lineWidth = 14; g.globalAlpha = 0.85
+    g.beginPath(); g.moveTo(-20, h * 0.5 + off); g.bezierCurveTo(w * 0.3, h * 0.28 + off, w * 0.7, h * 0.72 + off, w + 20, h * 0.46 + off); g.stroke()
+  }
+  g.globalAlpha = 1
+  g.textAlign = 'center'
+  g.save(); g.shadowColor = '#ff4f9a'; g.shadowBlur = 30; g.fillStyle = '#ffe1f0'
+  g.font = 'italic 900 128px "JetBrains Mono", monospace'
+  g.fillText('WALKER LANES', w / 2, h * 0.3)
+  g.restore()
+  // lanes read 1-2-3 from the bowler's left (world +x is on the left when facing the pins)
+  const X0 = LANE.x[0] - LANE.w / 2 - LANE.gut - 0.1, X1 = LANE.x[2] + LANE.w / 2 + LANE.gut + 0.1
+  ;[LANE.x[2], LANE.x[1], LANE.x[0]].forEach((x, i) => {
+    const cx = ((X1 - x) / (X1 - X0)) * w
+    g.fillStyle = 'rgba(8,8,24,0.85)'; g.beginPath(); g.arc(cx, h * 0.86, 70, 0, Math.PI * 2); g.fill()
+    g.strokeStyle = '#4fd8ff'; g.lineWidth = 8; g.stroke()
+    g.fillStyle = '#f0f4ff'; g.font = '800 96px "JetBrains Mono", monospace'; g.fillText(String(i + 1), cx, h * 0.86 + 34)
+  })
+}
+// equirectangular marbled ball with three finger holes
+function drawBowlingBall(g, w, h) {
+  g.fillStyle = '#1d3fbf'; g.fillRect(0, 0, w, h)
+  for (let i = 0; i < 40; i++) {
+    g.strokeStyle = i % 3 ? 'rgba(107,159,255,0.55)' : 'rgba(8,18,70,0.6)'
+    g.lineWidth = 3 + (i % 5) * 3
+    g.beginPath()
+    const y = (i * 41) % h
+    g.moveTo(0, y)
+    for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x * 0.02 + i) * 26 + Math.cos(x * 0.007 + i * 2) * 18)
+    g.stroke()
+  }
+  g.fillStyle = '#06060c'
+  for (const [x, y, r] of [[w * 0.25 - 14, h * 0.42, 9], [w * 0.25 + 14, h * 0.42, 9], [w * 0.25, h * 0.6, 11]]) { g.beginPath(); g.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2); g.fill() }
+}
+// outfit textures: torso canvas wraps a cylinder, front centred at x = w/2, back at the seam (x = 0 / w).
+// Text is squeezed 0.62 wide so it reads in proportion on the body.
+function shirtText(g, text, x, y, font, fill, stroke = null, lw = 6) {
+  g.save(); g.translate(x, y); g.scale(0.62, 1)
+  g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'
+  if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw; g.lineJoin = 'round'; g.strokeText(text, 0, 0) }
+  g.fillStyle = fill; g.fillText(text, 0, 0)
+  g.restore()
+}
+function drawTeePlayer(g, w, h) {
+  g.fillStyle = '#24345e'; g.fillRect(0, 0, w, h)
+  for (let i = 0; i < 900; i++) { g.fillStyle = i % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)'; g.fillRect((i * 97) % w, (i * 53) % h, 2, 2) }
+  g.fillStyle = '#8CB4FF'; g.fillRect(0, 58, w, 7)
+  g.fillStyle = '#1a2646'; g.fillRect(0, h - 14, w, 14)
+  shirtText(g, 'W', w / 2 + 34, 110, '800 40px "JetBrains Mono", monospace', '#8CB4FF')
+}
+function drawSuit(g, w, h) {
+  g.fillStyle = '#2c2f38'; g.fillRect(0, 0, w, h)
+  const c = w / 2
+  g.fillStyle = '#f2f2f2'; g.beginPath(); g.moveTo(c - 36, 0); g.lineTo(c + 36, 0); g.lineTo(c, 120); g.closePath(); g.fill()
+  g.fillStyle = '#9e1f2b'; g.beginPath(); g.moveTo(c - 8, 4); g.lineTo(c + 8, 4); g.lineTo(c + 6, 18); g.lineTo(c + 10, 104); g.lineTo(c, 118); g.lineTo(c - 10, 104); g.lineTo(c - 6, 18); g.closePath(); g.fill()
+  g.strokeStyle = '#1b1d24'; g.lineWidth = 5
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(c + s * 52, 0); g.lineTo(c + s * 26, 70); g.lineTo(c + s * 6, 132); g.stroke() }
+  g.fillStyle = '#15161b'
+  for (const y of [158, 196]) { g.beginPath(); g.arc(c, y, 4, 0, Math.PI * 2); g.fill() }
+  g.fillStyle = '#e9e4d8'; g.fillRect(c + 34, 70, 14, 5) // pocket square
+}
+function drawFlannel(g, w, h) {
+  g.fillStyle = '#9e2f27'; g.fillRect(0, 0, w, h)
+  g.fillStyle = 'rgba(15,10,10,0.55)'
+  for (let x = 0; x < w; x += 48) g.fillRect(x, 0, 18, h)
+  for (let y = 0; y < h; y += 48) g.fillRect(0, y, w, 18)
+  g.fillStyle = 'rgba(255,210,90,0.35)'
+  for (let x = 30; x < w; x += 48) g.fillRect(x, 0, 2, h)
+  for (let y = 30; y < h; y += 48) g.fillRect(0, y, w, 2)
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(w / 2 - 6, 0, 12, h)
+  g.fillStyle = '#e9e1cf'
+  for (let y = 22; y < h; y += 46) { g.beginPath(); g.arc(w / 2, y, 3.5, 0, Math.PI * 2); g.fill() }
+}
+function drawBeach(g, w, h) {
+  g.fillStyle = '#1fa3a0'; g.fillRect(0, 0, w, h)
+  let s = 11
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647)
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * w, y = rnd() * h
+    g.fillStyle = '#2f7d3a'
+    g.beginPath(); g.ellipse(x + 16, y + 10, 16, 7, 0.6, 0, Math.PI * 2); g.fill()
+    g.fillStyle = i % 3 ? '#ff6f91' : '#ffd36b'
+    for (let p = 0; p < 5; p++) { const a = (p / 5) * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * 9, y + Math.sin(a) * 9, 9, 6, a, 0, Math.PI * 2); g.fill() }
+    g.fillStyle = '#fff3b0'; g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill()
+  }
+  g.fillStyle = '#c4946d'; g.beginPath(); g.moveTo(w / 2 - 30, 0); g.lineTo(w / 2 + 30, 0); g.lineTo(w / 2, 64); g.closePath(); g.fill()
+}
+function drawOrioles(g, w, h) {
+  g.fillStyle = '#df4601'; g.fillRect(0, 0, w, h)
+  g.fillStyle = '#111'; g.fillRect(w / 2 - 9, 0, 4, h); g.fillRect(w / 2 + 5, 0, 4, h)
+  g.fillStyle = '#f4f0e6'
+  for (let y = 26; y < h; y += 44) { g.beginPath(); g.arc(w / 2, y, 3, 0, Math.PI * 2); g.fill() }
+  shirtText(g, 'Orioles', w / 2, 82, 'italic 700 58px Georgia, "Times New Roman", serif', '#111', '#f4f0e6', 8)
+  // #35 on the back, drawn on both sides of the seam so it wraps
+  for (const x of [0, w]) shirtText(g, '35', x, 120, '900 120px "Arial Black", Arial, sans-serif', '#111', '#f4f0e6', 10)
+  shirtText(g, '35', w / 2 - 44, 170, '900 40px "Arial Black", Arial, sans-serif', '#111', '#f4f0e6', 5)
+}
+function drawLightning(g, w, h) {
+  g.fillStyle = '#002868'; g.fillRect(0, 0, w, h)
+  g.fillStyle = '#ffffff'
+  g.fillRect(0, h - 44, w, 14); g.fillRect(0, h - 22, w, 6) // hem stripes
+  g.fillRect(0, 0, w, 16) // shoulder yoke
+  // a plain white bolt on the chest and a smaller one on the back
+  const bolt = (cx, cy, s) => {
+    g.save(); g.translate(cx, cy); g.scale(0.62 * s, s)
+    g.beginPath(); g.moveTo(8, -48); g.lineTo(-22, 6); g.lineTo(-2, 6); g.lineTo(-10, 48); g.lineTo(22, -8); g.lineTo(2, -8); g.closePath(); g.fill()
+    g.restore()
+  }
+  bolt(w / 2, 102, 1.2)
+  for (const x of [0, w]) bolt(x, 96, 0.9)
+}
+function drawPurdue(g, w, h) {
+  g.fillStyle = '#111114'; g.fillRect(0, 0, w, h)
+  g.fillStyle = '#cfb991'; g.fillRect(0, h - 16, w, 6)
+  g.strokeStyle = '#cfb991'; g.lineWidth = 3
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(w / 2 + s * 16, 0); g.lineTo(w / 2 + s * 18, 66); g.stroke() }
+  shirtText(g, 'PURDUE', w / 2, 104, '900 50px "Arial Black", Arial, sans-serif', '#cfb991')
+  g.strokeStyle = '#2a2a30'; g.lineWidth = 4
+  g.beginPath(); g.moveTo(w / 2 - 50, 228); g.lineTo(w / 2 - 38, 168); g.lineTo(w / 2 + 38, 168); g.lineTo(w / 2 + 50, 228); g.stroke()
 }
 
 const SKY_VERT = /* glsl */`
