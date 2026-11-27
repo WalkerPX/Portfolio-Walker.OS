@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Credit Bureau Enterprises v. Pelo · Walker's Law Library</title>
+  <meta name="description" content="608 N.W.2d 20 (Iowa 2000). Contracts notes in Walker's Law Library." />
+  <meta property="og:title" content="Walker's Law Library" />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#040405" />
+  <!-- One shell serves /lawlibrary/, /lawlibrary/<course>/ and /lawlibrary/<course>/<note>/.
+       tools/build-lawlibrary.mjs copies it into each course and note folder; edit this file, then rebuild. -->
+  <link rel="icon" href="/assets/WLogoPFP.png" />
+  <link rel="apple-touch-icon" href="/assets/WLogoPFP.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/lawlibrary/app.css" />
+</head>
+<body>
+  <canvas id="sky" aria-hidden="true"></canvas>
+
+  <header class="top">
+    <div class="top-l">
+      <a class="home" href="/?mode=professional&amp;open=work" title="Back to the portfolio">
+        <img src="/assets/WLogoPFP.png" alt="" width="26" height="26" />
+      </a>
+      <a class="brand" href="/lawlibrary/">Walker&rsquo;s Law Library</a>
+    </div>
+    <nav class="crumbs" id="crumbs" aria-label="Orbit"></nav>
+    <div class="top-r">
+      <div class="search">
+        <input id="q" type="search" placeholder="Search notes" autocomplete="off" spellcheck="false" aria-label="Search notes" />
+        <kbd>/</kbd>
+        <ul id="sugg" class="sugg" role="listbox" hidden></ul>
+      </div>
+    </div>
+  </header>
+
+  <aside class="legend" id="legend" aria-label="Orbits"></aside>
+  <div class="hint" id="hint"></div>
+  <div class="tip" id="tip" hidden></div>
+
+  <section class="reader" id="reader" role="dialog" aria-label="Note" hidden>
+    <div class="rbar" id="rbar">
+      <button type="button" class="rbtn" id="rBack" title="Back" aria-label="Back" disabled>&#8249;</button>
+      <div class="rpath" id="rPath"></div>
+      <a class="rbtn rnew" id="rNew" href="#" target="_blank" rel="noopener" title="Open this note at its own address">Open in new tab <span aria-hidden="true">&#8599;</span></a>
+      <button type="button" class="rbtn" id="rClose" title="Close (Esc)" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="rscroll" id="rScroll">
+      <article class="doc" id="doc"></article>
+    </div>
+  </section>
+
+  <noscript><p class="nojs">Walker&rsquo;s Law Library needs JavaScript to draw its orbits.</p></noscript>
+  <script src="/lawlibrary/app.js" defer></script>
+</body>
+</html>

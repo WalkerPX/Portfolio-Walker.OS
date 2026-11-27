@@ -46,10 +46,15 @@ const BW_OPEN = [R2.back + 9, R2.back + 15.6], BW_OPEN_H = 3.9
 // the arch into the bowling wing. The wing and its game are still built; with this off the ballpark's
 // right wall is solid and the wing can't be walked into. Flip to true to reopen it.
 const BOWLING_OPEN = false
+// the second room and its games (ballpark + home run derby, hoop, bowling wing, crowd). Off: they are
+// still built, so every generated name the edited room file matches against stays the same, but they
+// are hidden right after the room loads, never updated or clickable, and the doorway is walled over.
+// Flip to true to bring them all back.
+const MINIGAMES = false
 // an edited copy of the exported room (see assets/room/README.md). When set, its changes are laid
 // over the procedural room as it builds: moved, rotated, rescaled, reshaped, recoloured, deleted and
 // added objects. Leave empty to use the room exactly as the code builds it.
-const ROOM_EDITS_URL = ''
+const ROOM_EDITS_URL = 'assets/room/walker-os-room.edited.glb'
 const LANE = { w: 1.8, gut: 0.38, len: 19, foul: R2.back + 17.6, x: [10.6, 13.5, 16.4], play: 1 }
 const HEAD_Z = LANE.foul + LANE.len, DECK_END = HEAD_Z + 1.7, PIN_R = 0.1, BOWL_R = 0.186
 const CROWD_Z = BW.back + 1.15 // where the spectators stand on the riser
@@ -235,15 +240,18 @@ async function init() {
   add(new THREE.CylinderGeometry(0.47, 0.47, 0.02, 48), trim, C.x, ROOM.ceil - 0.005, C.z, scene, false)
   // open doorway through the front wall into the second room: casing on both faces, lined passage
   // sized to the walker: eye 2.85 above the floor ≈ 1.65 m, so a 2.03 m × 0.9 m door is 3.5 × 1.55
+  const doorParts = [] // everything that makes the doorway, hidden when the minigames are off
   for (const [z, ry] of [[ROOM.front, FACE.front], [R2.back, FACE.back]]) {
     const casing = group(DOOR_X, ROOM.floor, z, ry)
+    doorParts.push(casing)
     for (const [w, h, x, y] of [[DOOR_W + 0.16, 0.09, 0, DOOR_H + 0.045], [0.09, DOOR_H + 0.09, -(DOOR_W / 2 + 0.035), (DOOR_H + 0.09) / 2], [0.09, DOOR_H + 0.09, DOOR_W / 2 + 0.035, (DOOR_H + 0.09) / 2]])
       add(new THREE.BoxGeometry(w, h, 0.08), frameMat, x, y, 0.04, casing)
   }
   const jambMat = std('#14142a', 0.85, 0.05)
-  for (const sx of [-1, 1]) blockers.push(add(new THREE.BoxGeometry(0.02, DOOR_H, WALL_T), jambMat, DOOR_X + sx * DOOR_W / 2, ROOM.floor + DOOR_H / 2, ROOM.front + WALL_T / 2, scene, false))
-  blockers.push(add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T), jambMat, DOOR_X, ROOM.floor + DOOR_H, ROOM.front + WALL_T / 2, scene, false))
-  add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T + 0.02), std('#1a1714', 0.7, 0.2), DOOR_X, ROOM.floor - 0.009, ROOM.front + WALL_T / 2, scene, false)
+  for (const sx of [-1, 1]) doorParts.push(add(new THREE.BoxGeometry(0.02, DOOR_H, WALL_T), jambMat, DOOR_X + sx * DOOR_W / 2, ROOM.floor + DOOR_H / 2, ROOM.front + WALL_T / 2, scene, false))
+  doorParts.push(add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T), jambMat, DOOR_X, ROOM.floor + DOOR_H, ROOM.front + WALL_T / 2, scene, false))
+  blockers.push(...doorParts.slice(2))
+  doorParts.push(add(new THREE.BoxGeometry(DOOR_W, 0.02, WALL_T + 0.02), std('#1a1714', 0.7, 0.2), DOOR_X, ROOM.floor - 0.009, ROOM.front + WALL_T / 2, scene, false))
   const doorSign = add(new THREE.PlaneGeometry(1.2, 0.15), labelMat('BALLPARK  →', { color: '#ffb547', w: 768, h: 96 }), DOOR_X, ROOM.floor + DOOR_H + 0.28, ROOM.front - 0.01, scene, false)
   doorSign.rotation.y = Math.PI
   doorSign.material.emissiveIntensity = 0.9
@@ -459,6 +467,10 @@ async function init() {
   poster('front', -3.5, 1.7, 0.84, 1.12, canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h)), 'Big Ten',
     { glowTex: canvasTex(900, 1200, (g, w, h) => drawBigTen(g, w, h, true)), glow: 0.75 })
   poster('right', 5.6, 1.75, 0.96, 1.28, canvasTex(900, 1200, drawSportsMgmt), 'Sports Management')
+  // other interests (the edited room file hangs these with the rest on the back wall)
+  poster('back', -5.4, 1.85, 0.62, 0.87, canvasTex(600, 840, drawCreativeDirection), 'Creative Direction')
+  poster('back', -4.5, 1.85, 0.62, 0.87, canvasTex(600, 840, drawVideoProduction), 'Video Production')
+  poster('back', -3.6, 1.85, 0.62, 0.87, canvasTex(600, 840, drawResearchWriting), 'Research and Writing')
 
   // glowing team marks above the Purdue and Indiana posters
   const marks = [
@@ -1125,6 +1137,33 @@ async function init() {
     try { await applyRoomEdits({ scene, url: ROOM_EDITS_URL }) }
     catch (err) { console.warn('[boot3d] room edits not applied:', err) }
   }
+  // the glowing Purdue and IU marks are retired (built for stable names, never shown)
+  for (const m of marks) m.group.visible = false
+  if (!MINIGAMES) {
+    // everything past the front wall (ballpark, derby, hoop, bowling wing, crowd), the pins wherever
+    // the edited file left them, the doorway and its sign. Hidden objects drop out of the render
+    // lists, so their lights stop costing every pixel and their meshes stop costing draw calls.
+    const box = new THREE.Box3(), wp = new THREE.Vector3()
+    for (const o of scene.children) {
+      if (!o.visible || o.isCamera) continue
+      box.setFromObject(o)
+      const z = box.isEmpty() ? o.getWorldPosition(wp).z : box.min.z
+      if (z > ROOM.front + 0.05) o.visible = false
+    }
+    for (const o of [ball, derbyKit, bowlKit, hoop, bowlBall, doorSign, ...doorParts]) o.visible = false
+    for (const q of pins) q.g.visible = false
+    scene.traverse((o) => { if (/^Pin(_\d+)?$/.test(o.name)) o.visible = false })
+    // wall over the doorway, with the baseboard run across it
+    const fill = add(new THREE.PlaneGeometry(DOOR_W + 0.02, DOOR_H), wallMat, DOOR_X, ROOM.floor + DOOR_H / 2, ROOM.front, scene, false)
+    fill.rotation.y = Math.PI
+    fill.name = 'Wall_Front_DoorFill'
+    blockers.push(fill)
+    add(new THREE.BoxGeometry(DOOR_W + 0.18, 0.12, 0.03), frameMat, DOOR_X, ROOM.floor + 0.06, ROOM.front - 0.015, scene, false).name = 'Wall_Front_DoorFill_Baseboard'
+    // nothing in the room moves through the key light's shadow now, so its shadow map is drawn
+    // once instead of every frame (re-requested by the few things that change it)
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
+  }
   // ---------- camera rig ----------
   // yaw/pitch: forward = -(sin yaw · cos pitch, sin pitch, cos yaw · cos pitch)
   const cur = { yaw: WALK.yaw0, pitch: WALK.pitch0 }
@@ -1144,11 +1183,12 @@ async function init() {
     ...[(LANE.x[0] + LANE.x[1]) / 2, (LANE.x[1] + LANE.x[2]) / 2].map((x) => [x - 0.33, RETURN_Z - 0.9, x + 0.33, RETURN_Z + 1.0])] // ball returns
   // walkable floor: the rooms, the doorway passage, the bowling wing up to the foul line and the arch
   // into it, each [x0, z0, x1, z1]
-  const AREAS = [[ROOM.l, ROOM.back, ROOM.r, ROOM.front], [R2.l, R2.back, R2.r, R2.front],
-    [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1],
-    ...(BOWLING_OPEN ? [[BW.l, BW.back, BW.r, LANE.foul], [R2.r - 1, BW_OPEN[0], BW.l + 1, BW_OPEN[1]]] : [])]
+  const AREAS = [[ROOM.l, ROOM.back, ROOM.r, ROOM.front], ...(MINIGAMES ? [[R2.l, R2.back, R2.r, R2.front],
+    [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1]] : []),
+    ...(MINIGAMES && BOWLING_OPEN ? [[BW.l, BW.back, BW.r, LANE.foul], [R2.r - 1, BW_OPEN[0], BW.l + 1, BW_OPEN[1]]] : [])]
   const inRoom2 = (p) => p.z > ROOM.front + WALL_T / 2
-  const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42]]
+  // [x, z, r]; the last one is the desk chair (DeskChair in the edited room file)
+  const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42], [0.12, 2.6, 0.47]]
   function collide(p) {
     const R = WALK.radius
     for (const [x0, z0, x1, z1] of SOLIDS) {
@@ -1190,12 +1230,35 @@ async function init() {
   }
   addEventListener('resize', resize)
   resize()
+  // resolution that follows the GPU: frame time is averaged, and the pixel ratio steps down (to 1)
+  // while frames run long, then back toward the screen's ratio once there is headroom. Changing it
+  // reallocates the canvas, so steps are at least 2 s apart, and a ratio that proved too slow
+  // becomes the ceiling (no see-sawing between two sizes).
+  const PR_MAX = Math.min(devicePixelRatio || 1, 2), PR_MIN = Math.min(1, PR_MAX)
+  const pacing = { pr: PR_MAX, cap: PR_MAX, avg: 1 / 60, since: 0, smooth: 0 }
+  function adaptResolution(rawDt, t) {
+    if (rawDt > 0.25 || document.hidden) return // back from a background tab: not a GPU measurement
+    pacing.avg += (rawDt - pacing.avg) * 0.05
+    // the first seconds compile shaders and upload textures: not representative
+    if (t < 3 || t - pacing.since < 2) return
+    // a long smooth stretch lets a lowered ceiling back up a step
+    pacing.smooth = pacing.avg < 1 / 57 ? pacing.smooth + rawDt : 0
+    if (pacing.smooth > 20 && pacing.cap < PR_MAX) { pacing.cap = Math.min(PR_MAX, pacing.cap + 0.25); pacing.smooth = 0 }
+    let next = pacing.pr
+    if (pacing.avg > 1 / 45 && pacing.pr > PR_MIN) { pacing.cap = pacing.pr - 0.25; next = Math.max(PR_MIN, pacing.pr - 0.25) }
+    else if (pacing.avg < 1 / 57 && pacing.pr < pacing.cap) next = Math.min(pacing.cap, pacing.pr + 0.25)
+    if (next === pacing.pr) return
+    pacing.pr = next
+    pacing.since = t
+    renderer.setPixelRatio(next)
+    resize()
+  }
 
   // ---------- input ----------
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector2()
   const pointers = new Map()
-  const pickables = [computer, sw, ball, derbyKit, bowlKit, ...windowGroups, ...posters]
+  const pickables = [computer, sw, ...(MINIGAMES ? [ball, derbyKit, bowlKit] : []), ...windowGroups, ...posters]
   const rayTargets = [...pickables, ...blockers]
   let drag = null, hoverKind = null, hoverPoster = null
   // lightsOn: the switch's "up" position = bright room lights; off is the dim base mood
@@ -1524,10 +1587,13 @@ async function init() {
   const focusPos = new THREE.Vector3(), focusLook = new THREE.Vector3()
   const focusPosTgt = new THREE.Vector3(), focusLookTgt = new THREE.Vector3()
   let focusAmt = 0
+  const fN = new THREE.Vector3(), fP = new THREE.Vector3(), fS = new THREE.Vector3(), fQ = new THREE.Quaternion()
   function focusPoster(g) {
-    const { w, h } = g.userData.size
-    const n = new THREE.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new THREE.Quaternion()))
-    const p = g.getWorldPosition(new THREE.Vector3())
+    // size as built, times any scale the edited room file gave the poster
+    g.getWorldScale(fS)
+    const w = g.userData.size.w * fS.x, h = g.userData.size.h * fS.y
+    const n = fN.set(0, 0, 1).applyQuaternion(g.getWorldQuaternion(fQ))
+    const p = g.getWorldPosition(fP)
     const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
     const k = g.userData.zoom ?? 0.62
     const d = Math.max((h * k) / tanV, (w * k) / (tanV * camera.aspect))
@@ -2721,7 +2787,9 @@ async function init() {
 
   function frame() {
     raf = requestAnimationFrame(frame)
-    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime
+    // clamped so a stalled tab or one slow frame never jumps an animation or the walker
+    const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime
+    adaptResolution(raw, t)
 
     // lights: B = 0 is the room's base mood lighting, B = 1 (switch up) is a clearly brighter room
     lightAmt += ((lightsOn ? 1 : 0) - lightAmt) * Math.min(1, dt * 6)
@@ -2736,9 +2804,11 @@ async function init() {
     ceilMat.emissiveIntensity = 1.4 + 2.2 * B
     rim.intensity = 8
     renderer.toneMappingExposure = 1.2 + 0.3 * B
-    for (const [l, p0] of lamps2) l.intensity = p0 * (0.7 + 0.5 * B)
-    hemi2.intensity = 10 + 8 * B
-    fixtureMat.emissiveIntensity = 1.4 + 1.4 * B
+    if (MINIGAMES) {
+      for (const [l, p0] of lamps2) l.intensity = p0 * (0.7 + 0.5 * B)
+      hemi2.intensity = 10 + 8 * B
+      fixtureMat.emissiveIntensity = 1.4 + 1.4 * B
+    }
     rocker.rotation.x = lightsOn ? -0.3 : 0.3
     locator.emissiveIntensity = 0.5 + 0.35 * Math.sin(t * 2.4) + (lightsOn ? 0 : 0.4)
 
@@ -2752,14 +2822,14 @@ async function init() {
     ledMat.emissiveIntensity = on ? 2.2 : 0
     ringMat.emissiveIntensity = on ? 1.8 : 0.35 + breathe * 0.8 + invite * 1.8
     hddMat.emissiveIntensity = on ? (Math.random() > 0.55 ? 2.5 : 0.15) : 0
-    routerLeds.forEach((m, i) => { m.emissiveIntensity = i === 0 ? 1.2 : Math.sin(t * (3 + i * 1.7) + i) > 0.2 ? 1.6 : 0.15 })
+    for (let i = 0; i < routerLeds.length; i++) routerLeds[i].emissiveIntensity = i === 0 ? 1.2 : Math.sin(t * (3 + i * 1.7) + i) > 0.2 ? 1.6 : 0.15
     for (const g of posters) {
       const base = g.userData.glow ?? 0.15
       const pulse = g.userData.glow ? 0.08 * Math.sin(t * 1.4) : 0
       const want = base + pulse + (g === hoverPoster && !focusOn ? 0.13 : 0) + (1 - L) * (g.userData.glow ? 0.25 : 0.05)
       g.userData.mat.emissiveIntensity += (want - g.userData.mat.emissiveIntensity) * Math.min(1, dt * 10)
     }
-    for (const m of marks) m.tick(t, L)
+    for (const m of marks) if (m.group.visible) m.tick(t, L)
     // the painted scenes run livelier while a window is being looked at up close
     const close = focused?.userData.kind === 'window' ? focusAmt : 0
     sky.tick(t, dt, focused === windowGroups[1] ? close : 0)
@@ -2871,7 +2941,7 @@ async function init() {
     fogAmt += (inWing - fogAmt) * Math.min(1, dt * 2)
     scene.fog.near = 18 + fogAmt * 22
     scene.fog.far = 48 + fogAmt * 40
-    laneSpot.material.opacity = bowl ? 0 : 0.3 + 0.2 * Math.sin(t * 3)
+    if (MINIGAMES) laneSpot.material.opacity = bowl ? 0 : 0.3 + 0.2 * Math.sin(t * 3)
 
     // dolly into the screen at the end of the boot
     if (zoomT0 >= 0) {
@@ -2891,7 +2961,9 @@ async function init() {
     camera.updateMatrixWorld()
 
     // ball: carried in view, or flying / rolling under simple physics
-    if (held) {
+    if (!MINIGAMES) {
+      // the ball and both games are switched off: nothing to step
+    } else if (held) {
       ball.position.copy(HOLD).applyMatrix4(camera.matrixWorld)
       ball.rotation.y += dt * 0.6
     } else {
@@ -2903,50 +2975,53 @@ async function init() {
     meterFlash = Math.max(0, meterFlash - dt)
     if (!charge && meterFlash <= 0) meterEl.classList.remove('show')
 
-    // derby station: live game, or the machine idling
-    if (derby) derbyStep(dt)
-    else {
-      wheels[0].rotateY(2 * dt); wheels[1].rotateY(-2 * dt)
-      lampMat.emissiveIntensity = 0.5 + 0.4 * Math.sin(t * 2)
-    }
-    const showZone = derby && derby.phase !== 'summary' ? derbyAmt : 0
-    zoneLine.material.opacity = 0.5 * showZone
-    aimRing.material.opacity = 0.85 * showZone
-    zoneLine.visible = aimRing.visible = showZone > 0.01
-    aimRing.position.copy(aimPt).z -= 0.01
+    // the games' idle animation and effects (skipped entirely when the minigames are off)
+    if (MINIGAMES) {
+      // derby station: live game, or the machine idling
+      if (derby) derbyStep(dt)
+      else {
+        wheels[0].rotateY(2 * dt); wheels[1].rotateY(-2 * dt)
+        lampMat.emissiveIntensity = 0.5 + 0.4 * Math.sin(t * 2)
+      }
+      const showZone = derby && derby.phase !== 'summary' ? derbyAmt : 0
+      zoneLine.material.opacity = 0.5 * showZone
+      aimRing.material.opacity = 0.85 * showZone
+      zoneLine.visible = aimRing.visible = showZone > 0.01
+      aimRing.position.copy(aimPt).z -= 0.01
 
-    // confetti + rim flash + net swish
-    if (confetti.visible) {
-      let alive = 0
-      bits.forEach((q, i) => {
-        if (q.life <= 0) { dummy.scale.setScalar(0) } else {
-          alive++
-          q.life -= dt
-          q.v.y -= 4.2 * dt
-          q.v.multiplyScalar(Math.max(0, 1 - 1.5 * dt))
-          q.v.x += Math.sin(t * 6 + q.ph) * 0.9 * dt // flutter
-          q.p.addScaledVector(q.v, dt)
-          if (q.p.y < ROOM.floor + 0.012) { q.p.y = ROOM.floor + 0.012; q.v.set(0, 0, 0); q.w.multiplyScalar(0.8) }
-          q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt
-          dummy.scale.setScalar(Math.min(1, q.life / 0.6))
-        }
-        dummy.position.copy(q.p)
-        dummy.rotation.copy(q.r)
-        dummy.updateMatrix()
-        confetti.setMatrixAt(i, dummy.matrix)
-      })
-      confetti.instanceMatrix.needsUpdate = true
-      if (!alive) confetti.visible = false
+      // confetti + rim flash + net swish
+      if (confetti.visible) {
+        let alive = 0
+        bits.forEach((q, i) => {
+          if (q.life <= 0) { dummy.scale.setScalar(0) } else {
+            alive++
+            q.life -= dt
+            q.v.y -= 4.2 * dt
+            q.v.multiplyScalar(Math.max(0, 1 - 1.5 * dt))
+            q.v.x += Math.sin(t * 6 + q.ph) * 0.9 * dt // flutter
+            q.p.addScaledVector(q.v, dt)
+            if (q.p.y < ROOM.floor + 0.012) { q.p.y = ROOM.floor + 0.012; q.v.set(0, 0, 0); q.w.multiplyScalar(0.8) }
+            q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt
+            dummy.scale.setScalar(Math.min(1, q.life / 0.6))
+          }
+          dummy.position.copy(q.p)
+          dummy.rotation.copy(q.r)
+          dummy.updateMatrix()
+          confetti.setMatrixAt(i, dummy.matrix)
+        })
+        confetti.instanceMatrix.needsUpdate = true
+        if (!alive) confetti.visible = false
+      }
+      flashT += dt
+      const fl = Math.max(0, 1 - flashT / 0.7)
+      flash.material.opacity = fl * 0.9
+      flash.scale.setScalar(0.3 + (1 - fl) * 1.4)
+      rimMat.emissiveIntensity = fl * 2.4
+      swish = Math.max(0, swish - dt * 1.6)
+      tickBlink = Math.max(0, tickBlink - dt)
+      tickMat.color.setScalar(tickBlink > 0 && Math.sin(tickBlink * 26) < 0 ? 0.35 : 1)
+      net.scale.set(1 - swish * 0.12 * Math.sin(t * 30), 1 + swish * 0.3, 1 - swish * 0.12 * Math.sin(t * 30))
     }
-    flashT += dt
-    const fl = Math.max(0, 1 - flashT / 0.7)
-    flash.material.opacity = fl * 0.9
-    flash.scale.setScalar(0.3 + (1 - fl) * 1.4)
-    rimMat.emissiveIntensity = fl * 2.4
-    swish = Math.max(0, swish - dt * 1.6)
-    tickBlink = Math.max(0, tickBlink - dt)
-    tickMat.color.setScalar(tickBlink > 0 && Math.sin(tickBlink * 26) < 0 ? 0.35 : 1)
-    net.scale.set(1 - swish * 0.12 * Math.sin(t * 30), 1 + swish * 0.3, 1 - swish * 0.12 * Math.sin(t * 30))
 
     // computer: soft glow as you walk up to the desk, cue when looking at it
     fwd.copy(look).sub(pos).normalize()
@@ -3050,6 +3125,7 @@ async function init() {
     const haloMat = new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, radialGlow(glowColor)), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.4 })
     add(new THREE.PlaneGeometry(1.05, 0.9), haloMat, 0, 0, 0.004, g, false)
     return {
+      group: g,
       tick(t, L) {
         const k = 0.9 + 0.1 * Math.sin(t * 1.3 + along)
         for (const m of lit) m.emissiveIntensity = (base + (1 - L) * 0.5) * k
@@ -4096,6 +4172,85 @@ function drawBigTen(g, w, h, glowOnly = false) {
   if (!glowOnly) posterTitle(g, w, h, 'BIG TEN', 'CONFERENCE · 18 MEMBERS', { size: 72 })
 }
 
+// creative direction: a layout grid with a type specimen and a colour palette
+function drawCreativeDirection(g, w, h) {
+  posterBase(g, w, h, P.surf, 'rgba(217,185,106,0.10)')
+  // 12-column grid
+  g.strokeStyle = 'rgba(192,200,224,0.10)'; g.lineWidth = 1
+  for (let c = 0; c <= 12; c++) { const x = 44 + c * ((w - 88) / 12); g.beginPath(); g.moveTo(x, 48); g.lineTo(x, 520); g.stroke() }
+  // type specimen
+  g.textAlign = 'left'; g.fillStyle = P.text; g.font = '800 150px Inter, sans-serif'
+  g.fillText('Aa', 50, 210)
+  mono(g, 13, P.muted, 'INTER 800 · 150 / 0.9', 160, 240)
+  // palette chips
+  const sw = ['#6B9FFF', '#d9b96a', '#c8463c', '#F0F4FF', '#1A1A2E']
+  sw.forEach((c, i) => {
+    const x = 50 + i * 100
+    g.fillStyle = c; g.fillRect(x, 290, 84, 84)
+    g.strokeStyle = 'rgba(192,200,224,0.25)'; g.strokeRect(x + 0.5, 290.5, 83, 83)
+    mono(g, 11, P.muted, c.toUpperCase(), x + 42, 394)
+  })
+  // a crop mark and a rule, like a proof sheet
+  g.strokeStyle = P.gold; g.lineWidth = 2
+  g.beginPath(); g.moveTo(50, 440); g.lineTo(w - 50, 440); g.stroke()
+  for (const [x, y, dx, dy] of [[w - 70, 470, 20, 0], [w - 70, 470, 0, 20]]) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.stroke() }
+  mono(g, 13, P.dim, 'GAME DAY · PROMO · BRAND', w / 2, 500)
+  posterTitle(g, w, h, 'CREATIVE DIRECTION', 'DESIGN · BRAND · CAMPAIGNS', { accent: P.gold, size: 60 })
+}
+// video production: a clapperboard over an edit timeline
+function drawVideoProduction(g, w, h) {
+  posterBase(g, w, h, P.surf, 'rgba(200,70,60,0.10)')
+  const x0 = 70, x1 = w - 70, top = 120
+  // clapper arm, striped, tilted open
+  g.save(); g.translate(x0, top); g.rotate(-0.16)
+  g.fillStyle = '#0b0b14'; g.fillRect(0, -54, x1 - x0, 50)
+  g.fillStyle = P.text
+  for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(i * 70 + 10, -54); g.lineTo(i * 70 + 45, -54); g.lineTo(i * 70 + 25, -4); g.lineTo(i * 70 - 10, -4); g.closePath(); g.fill() }
+  g.restore()
+  // slate body
+  g.fillStyle = '#0b0b14'; g.fillRect(x0, top, x1 - x0, 230)
+  g.strokeStyle = 'rgba(192,200,224,0.55)'; g.lineWidth = 2; g.strokeRect(x0 + 0.5, top + 0.5, x1 - x0 - 1, 229)
+  g.beginPath(); g.moveTo(x0, top + 80); g.lineTo(x1, top + 80); g.moveTo(x0, top + 155); g.lineTo(x1, top + 155); g.moveTo(w / 2, top + 80); g.lineTo(w / 2, top + 230); g.stroke()
+  mono(g, 13, P.muted, 'PROD', x0 + 50, top + 26, 'left'); mono(g, 26, P.text, 'WALKER.OS', x0 + 150, top + 56)
+  mono(g, 13, P.muted, 'SCENE', x0 + 50, top + 104, 'left'); mono(g, 34, P.text, '12A', x0 + 115, top + 136)
+  mono(g, 13, P.muted, 'TAKE', w / 2 + 40, top + 104, 'left'); mono(g, 34, P.crimson, '3', w / 2 + 115, top + 136)
+  mono(g, 13, P.muted, 'ROLL', x0 + 50, top + 180, 'left'); mono(g, 24, P.text, 'A007', x0 + 115, top + 208)
+  mono(g, 13, P.muted, 'FPS', w / 2 + 40, top + 180, 'left'); mono(g, 24, P.text, '23.976', w / 2 + 125, top + 208)
+  // timeline: three tracks of clips and a playhead
+  const ty = 420
+  const tracks = [[[0, 0.3], [0.33, 0.62], [0.66, 1]], [[0.08, 0.4], [0.5, 0.86]], [[0, 0.55], [0.6, 0.95]]]
+  const cols = ['rgba(107,159,255,0.7)', 'rgba(217,185,106,0.7)', 'rgba(140,180,255,0.35)']
+  tracks.forEach((clips, r) => clips.forEach(([a, b]) => { g.fillStyle = cols[r]; g.fillRect(x0 + a * (x1 - x0), ty + r * 30, (b - a) * (x1 - x0) - 4, 22) }))
+  g.strokeStyle = P.crimson; g.lineWidth = 3
+  g.beginPath(); g.moveTo(x0 + 0.58 * (x1 - x0), ty - 14); g.lineTo(x0 + 0.58 * (x1 - x0), ty + 92); g.stroke()
+  posterTitle(g, w, h, 'VIDEO PRODUCTION', 'SHOOT · CUT · GRADE', { accent: P.crimson, size: 60 })
+}
+// research and writing: a manuscript page with footnotes and margin notes
+function drawResearchWriting(g, w, h) {
+  posterBase(g, w, h)
+  const px = 80, py = 60, pw = w - 160, ph = 470
+  g.fillStyle = '#e9e2cf'; g.fillRect(px, py, pw, ph)
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(px + 8, py + ph, pw, 8)
+  g.fillStyle = '#2a2a33'; g.textAlign = 'center'; g.font = '700 22px Georgia, serif'
+  g.fillText('Chapter III', w / 2, py + 48)
+  g.font = 'italic 14px Georgia, serif'; g.fillText('Sources, Evidence, Argument', w / 2, py + 72)
+  // body lines, one with a footnote mark, a highlighted passage
+  for (let i = 0; i < 13; i++) {
+    const y = py + 110 + i * 22, len = i % 5 === 4 ? 0.6 : 0.92 - (i % 3) * 0.04
+    g.fillStyle = i === 5 ? 'rgba(217,185,106,0.55)' : 'rgba(42,42,51,0.55)'
+    g.fillRect(px + 30, y, (pw - 60) * len, i === 5 ? 9 : 6)
+  }
+  g.fillStyle = '#2a2a33'; g.font = '700 13px Georgia, serif'; g.textAlign = 'left'; g.fillText('¹', px + 30 + (pw - 60) * 0.88, py + 108 + 5 * 22)
+  g.strokeStyle = 'rgba(42,42,51,0.4)'; g.lineWidth = 1
+  g.beginPath(); g.moveTo(px + 30, py + ph - 70); g.lineTo(px + 150, py + ph - 70); g.stroke()
+  g.font = '11px Georgia, serif'; g.fillStyle = 'rgba(42,42,51,0.8)'
+  g.fillText('¹ See primary sources, appendix A.', px + 30, py + ph - 50)
+  // a red margin note
+  g.strokeStyle = P.crimson; g.lineWidth = 2
+  g.beginPath(); g.ellipse(px + 30 + (pw - 60) * 0.3, py + 112 + 5 * 22, (pw - 60) * 0.34, 14, 0, 0, Math.PI * 2); g.stroke()
+  g.fillStyle = P.crimson; g.font = 'italic 15px Georgia, serif'; g.fillText('cite!', px + pw - 70, py + 82 + 5 * 22)
+  posterTitle(g, w, h, 'RESEARCH & WRITING', 'HISTORY · ARCHIVES · ARGUMENT', { size: 60 })
+}
 function drawAperture(g, w, h) {
   posterBase(g, w, h)
   const cx = w / 2, cy = h * 0.38

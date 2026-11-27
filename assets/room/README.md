@@ -83,3 +83,56 @@ room rather than replacing it. That also means:
   box.
 - **When the room's code changes** (objects added or removed in `boot3d.js`), generated names can
   shift. Export a fresh copy and redo the edits on it.
+
+## The redesigned room (`walker-os-room.edited.glb`)
+
+Built in Blender (`WalkerOSRoom.blend`) on top of this export and loaded by `ROOM_EDITS_URL` in `boot3d.js`.
+
+- **Seated desk:** walnut desk top (`Ballpark_Box_7`), steel sled legs, cable tray, felt desk mat, thin-bezel monitor
+  (`Monitor_Box*`; the screen stays at `SCREEN_POS`), aluminium keyboard case, new mouse, a smaller glass-sided
+  tower with fans, GPU and RAM (`Tower_*`), and `DeskChair`. The Blender scene camera `Cam_Seated` is the seated eye point.
+- **Lights added:** `DeskLamp_TaskLight`, `MonitorLightBar_Light`, `TrackLight_Spot_L/R`, `FloorLamp_Light`.
+  **Retired** (hidden on the site): `DeskLamp_Light` and `Light_Wash` (both cool blue, colour set by code).
+  `Light_Rim` moved behind the monitor as bias lighting.
+- **Light budget:** every light costs every pixel in three.js. The room had 20 lights; going past about 23 halved the
+  frame rate, so the window lights (`Window_StarryNight_MoonSpill`, `Window_Nighthawks_StreetFill`, `SN_MoonGlow`,
+  `NH_DinerLight`) live in `COL_BlenderOnly` and light only the Blender view. On the site, the code's
+  `Light_Moon` and `Light_DinerSpill` light the windows. With the second room retired, 14 lights render.
+  Add a web light only if you remove one.
+- **Posters:** all `Poster_*` hang on the back wall behind the desk with new frames, on one centre line
+  (z 2.3, every poster's empty scaled 0.8; the site's focus zoom accounts for the scale). Left of the desk, other
+  interests: Exposure, Creative Direction, History, Video Production, Research and Writing, Contracts. Right, sports:
+  Triple Option, Scuderia Ferrari, 2024 Purdue, Big Ten, National Champions, Camden Yards, Analytics, Sports
+  Management. Creative Direction, Video Production and Research and Writing are drawn by `boot3d.js` (canvas
+  textures); their planes in the .blend carry packed PNG renders of the same art under `WOS_Poster_*` materials,
+  so the site keeps its live canvas and Blender shows the poster.
+- **Interest props** (`COL_Props`, materials `PROP_*`, merged one mesh per material per group): `Prop_BatRack`
+  (34 in maple bat on brass pegs over a walnut plaque) and `Prop_GloveShelf` (glove + baseball) under the sports
+  posters; `Prop_InterestShelf` (clapperboard, globe, gavel) under the other-interest posters.
+- **Retired** (`COL_Retired`, excluded from the view layer, so never exported and hidden on the site): the second
+  room and everything in it (ballpark, home run derby, hoop, bowling wing, avatars, pins, their 8 lights), the
+  doorway (`Room_Group*`, `Room_Box_6`–`9`), `DoorSign` ("BALLPARK →"), the Purdue / IU marks (`BackWall_Group*`),
+  the tower's leftover power ring (`Tower_Torus`, `Tower_PowerButton`) and the Blender-built `NH_*` diner.
+  `BO_DoorFill` (Blender only) closes the doorway in the .blend; on the site `boot3d.js` adds `Wall_Front_DoorFill`.
+  The code side is `MINIGAMES` in `boot3d.js`: off, the games are still built (generated names stay stable) but
+  hidden, never stepped and not clickable. Turning it back on also needs the retired objects moved back into
+  `Collection` and a re-export.
+- **Windows:** `Outside_StarryNight` keeps its animated sky backdrop with new 3D terrain, village, cypress,
+  stars, moon and swirls (`SN_*`). `Outside_Nighthawks` is the original code-built diner again (its 193
+  `Outside_Nighthawks_*` children restored from `WalkerOSRoom.original-backup.blend`), so the waiter, steam, light
+  flicker and the L-shaped counter all run from `nighthawks()` in `boot3d.js`.
+  The Starry Night land (`SN_Terrain`, `SN_Village`, `SN_Cypress`, `SN_Trees`) shares `DIO_Paint`, which is
+  **unlit** (its colour goes straight to Material Output, exported as `KHR_materials_unlit`): the painting shows its
+  own colours (vertex colour `Col` × brush texture) without needing lights.
+
+### Exporting from the .blend again
+
+1. Hide the `COL_BlenderOnly` collection in the viewport (it holds the Blender-only screen picture, area lights,
+   the doorway fill and preview cameras), and keep `COL_Retired` excluded.
+2. File > Export > glTF 2.0: **glTF Binary**, **Include > Visible Objects**, **Punctual Lights** and **Cameras** on,
+   **Lighting Mode: Unitless** (Blender watts / 4π = the intensity the site uses), Apply Modifiers on.
+   **Data > Mesh > Vertex Color: Name**, name `Col`, with **Export all vertex colors** off. (The default exports a
+   fake white `COLOR_0` for the unlit `DIO_Paint` meshes and pushes the real colours to `COLOR_1`, which the site
+   ignores, so the painting turns white.)
+3. Don't apply transforms (Ctrl+A) on existing objects: the site matches them by name and transform, and posters
+   take their focus direction from their rotation.

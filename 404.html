@@ -8,6 +8,8 @@
     // Keep the path and hand over to the site, which restores it before anything else loads.
     ;(function(){
       var p=location.pathname+location.search+location.hash
+      // Law Library paths have their own pages; an unknown one (a renamed note) opens the library instead.
+      if(/^\/lawlibrary(\/|$)/.test(location.pathname)){location.replace('/lawlibrary/');return}
       try{sessionStorage.setItem('wos_path',p)}catch(e){}
       location.replace('/')
     })()
