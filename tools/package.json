@@ -1,0 +1,11 @@
+{
+  "name": "walkeros-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "export-landing": "node export-landing.mjs"
+  },
+  "devDependencies": {
+    "three": "0.160.0"
+  }
+}

@@ -3,6 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- every view has its own path (/explore, /workspace, /app/about...), so relative URLs resolve from the site root -->
+  <base href="/" />
+  <script>
+    // Routes. A deep link that the static host doesn't know (GitHub Pages) lands on 404.html, which
+    // stores the path and sends the visitor here; put that path back before anything else runs.
+    ;(function(){
+      try{
+        var p=sessionStorage.getItem('wos_path')
+        if(p){sessionStorage.removeItem('wos_path');history.replaceState(null,'',p)}
+      }catch(e){}
+      var APPS=['about','work','projects','gallery','contact','links'],MODES=['creative','professional']
+      window.WOS_parseRoute=function(path){
+        var s=String(path||'/').replace(/\/index\.html$/,'/').replace(/\/+$/,'').split('/').filter(Boolean)
+        if(!s.length)return {view:'room'}
+        if(s[0]==='explore'&&s.length===1)return {view:'explore'}
+        if(s[0]==='workspace'){
+          if(s.length===1)return {view:'picker'}
+          if(s.length===2&&MODES.indexOf(s[1])>=0)return {view:'desk',mode:s[1]}
+        }
+        if(s[0]==='app'&&s.length===2&&APPS.indexOf(s[1])>=0)return {view:'desk',app:s[1]}
+        return {view:'room',unknown:true}
+      }
+      window.WOS_ROUTE=WOS_parseRoute(location.pathname)
+    })()
+  </script>
   <title>Walker Birchfield</title>
   <meta name="description" content="Walker Birchfield — History/Law Student & Creative Director" />
   <meta property="og:title" content="Walker Birchfield" />
@@ -645,7 +670,6 @@
       transition:transform .22s ease,border-color .22s ease,background .22s ease,box-shadow .22s ease}
     .mp-card:hover{transform:translateY(-6px);border-color:var(--accent);background:rgba(var(--tint-rgb),.08);
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(var(--accent-rgb),.25)}
-    .mp-card.pre{border-color:rgba(var(--accent-rgb),.45)}
     .mp-card[data-mode="creative"]:hover{border-color:#cf3a33;
       box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(207,58,51,.32),0 0 26px rgba(207,58,51,.14)}
     .mp-card[data-mode="professional"]:hover{border-color:#d9b96a;
@@ -774,6 +798,7 @@
 
   </style>
   <link rel="stylesheet" href="polish.css" />
+  <link rel="stylesheet" href="entry.css" />
 </head>
 <body>
 
@@ -783,10 +808,26 @@
 <!-- Glitch Flash -->
 <!-- ===== BOOT SCREEN ===== -->
 <div id="boot">
+  <!-- Entry gate: the landing and /explore are the same 3D room (boot3d.js, loaded by entry.js).
+       On the landing the camera is anchored at the desk; "Explore the room" unlocks walking.
+       Without WebGL the 2D monitor below is used. -->
+  <button type="button" class="explore-btn" id="exploreBtn" aria-label="Explore the 3D room">
+    <span class="eb-ic" aria-hidden="true">&#9670;</span>
+    <span class="eb-t"><span>Explore the room</span><span class="eb-sub">Walk around &middot; look &middot; play</span></span>
+  </button>
+  <button type="button" class="explore-btn desk-btn" id="deskBtn" aria-label="Back to the desk view">
+    <span class="eb-ic" aria-hidden="true">&#8592;</span>
+    <span class="eb-t"><span>Back to the desk</span></span>
+  </button>
+  <div class="room-loading" aria-live="polite"><span class="rl-ring"></span><span class="rl-t">Loading the room</span></div>
 <script>
-  // WebGL available: the 3D room will take over, so the 2D monitor must never paint underneath it.
-  // boot3d.js swaps three-pending for three-on, or removes it to fall back to the 2D monitor.
-  ;(function(){try{var c=document.createElement('canvas');if(c.getContext('webgl2')||c.getContext('webgl'))document.getElementById('boot').classList.add('three-pending')}catch(e){}})()
+  // Room routes with WebGL: entry.js loads the 3D room, so the 2D monitor must not flash first.
+  // Workspace routes open the desktop directly, so the boot screen starts out of the way.
+  ;(function(){
+    var b=document.getElementById('boot'),r=window.WOS_ROUTE||{view:'room'}
+    if(r.view==='picker'||r.view==='desk'){b.classList.add('hidden','direct');return}
+    try{var c=document.createElement('canvas');if(c.getContext('webgl2')||c.getContext('webgl'))b.classList.add('three-pending')}catch(e){}
+  })()
 </script>
   <div class="monitor" id="monitor">
     <div class="bezel">
@@ -795,7 +836,7 @@
         <div class="off-state" id="offState">
           <div class="logo"><img src="assets/logo-w-transparent.png" alt="W" /></div>
           <div class="wname">Walker.OS</div>
-          <div class="wver">v3.0.1 — 64-bit</div>
+          <div class="wver">v 7.5.7 — 64-bit</div>
           <div class="hint">▾  click to boot  ▾</div>
         </div>
 
@@ -1093,23 +1134,26 @@
 
 <!-- ===== WORKSPACE PICKER (first load) ===== -->
 <div id="modePicker">
+  <div class="mp-bg" aria-hidden="true"><span class="mp-orb a"></span><span class="mp-orb b"></span><span class="mp-orb c"></span></div>
+  <div class="mp-bar" aria-hidden="true">
+    <span class="mp-bar-l"><img src="assets/logo-w-transparent.png" alt="" />Walker.OS</span>
+    <span class="mp-bar-r" id="mpClock"></span>
+  </div>
   <div class="mp-inner">
-    <div class="mp-kicker">Walker.OS v3.0.1</div>
+    <div class="mp-logo3d" id="mpLogo3d" aria-hidden="true"><div class="l3d"><div class="l3d-spin"></div></div></div>
+    <div class="mp-kicker">Walker.OS v 7.5.7</div>
     <div class="mp-title">Which Workspace are you looking for?</div>
     <div class="mp-lead">Option can be changed in the top left at any time</div>
     <div class="mp-row">
       <div class="mp-card" data-mode="creative" onclick="chooseMode('creative',event)">
         <div class="mp-tile"><img src="assets/creative-logo.png" alt="Creative" onerror="imgFallback(this)" /><span class="mp-glyph">C</span></div>
         <div class="mp-name">Creative</div>
-        <div class="mp-desc">Photography &middot; Creative Director &middot; Graphic Design</div>
       </div>
       <div class="mp-card" data-mode="professional" onclick="chooseMode('professional',event)">
         <div class="mp-tile"><img src="assets/professional-logo.png" alt="Professional" onerror="imgFallback(this)" /><span class="mp-glyph">P</span></div>
         <div class="mp-name">Professional</div>
-        <div class="mp-desc">Undergraduate &middot; Law School &middot; Work Experience</div>
       </div>
     </div>
-    <div class="mp-hint">creative &middot; professional</div>
   </div>
 </div>
 
@@ -1150,7 +1194,7 @@
     {clear:true},
     // Kernel
     {t:'',c:''},
-    {t:'  Walker.OS v3.0.1 — 64-bit Kernel (x86_64)',c:'ac'},
+    {t:'  Walker.OS v 7.5.7 — 64-bit Kernel (x86_64)',c:'ac'},
     {t:'  RAM: 16384MB (DDR5-4800)',c:'dim'},
     {t:'',c:''},
     {t:'  [BOOT] Loading system modules...',c:'ac'},
@@ -1180,7 +1224,7 @@
   // Returning visitors (back from the gallery or a deep link) get a short resume sequence
   const QUICK_LINES=[
     {t:'',c:''},
-    {t:'  Walker.OS v3.0.1 — resuming from standby',c:'ac'},
+    {t:'  Walker.OS v 7.5.7 — resuming from standby',c:'ac'},
     {t:'',c:''},
     {t:'  [  OK  ]  session.restore       ',c:'ok'},
     {t:'  [  OK  ]  display.manager       ',c:'ok'},
@@ -1191,7 +1235,10 @@
 
   function boot(){
     if(S.bi>0)return
-    if(S.resume||hasDeepLink())LINES.splice(0,LINES.length,...QUICK_LINES)
+    // a 3D scene is still building: its own computer will boot once it is ready
+    {const bc=document.getElementById('boot').classList;if(bc.contains('three-pending'))return}
+    document.getElementById('boot').classList.add('booting')
+    if(S.resume||S.rebooted||hasDeepLink())LINES.splice(0,LINES.length,...QUICK_LINES)
     const s=document.getElementById('screen'),os=document.getElementById('offState'),t=document.getElementById('term'),l=document.getElementById('led'),cl=document.getElementById('cl')
     cl.style.display='none'
     s.classList.add('warm');l.classList.add('on')
@@ -1425,7 +1472,6 @@
       b.classList.toggle('on',on)
       b.setAttribute('aria-pressed',on?'true':'false')
     })
-    document.querySelectorAll('.mp-card').forEach(c=>c.classList.toggle('pre',c.dataset.mode===m))
     try{localStorage.setItem('wos_mode',m)}catch(e){}
     updateTB();updateMxTabs()
   }
@@ -1469,6 +1515,7 @@
   function swapMode(m){
     if(m===MODE||SWAPPING)return
     SWAPPING=true
+    if(window.WOS_ROUTER)WOS_ROUTER.quiet(2600)
     const scrim=document.getElementById('modeScrim')
     snapshotSession(MODE)
     // 1. this desktop's windows fold down into the tray
@@ -1491,6 +1538,8 @@
   }
 
   function chooseMode(m,ev){
+    // the zoom and the first window opening settle into one history entry
+    if(window.WOS_ROUTER)WOS_ROUTER.quiet(1700)
     const picker=document.getElementById('modePicker')
     const layer=document.getElementById('zoomLayer')
     const sw=document.getElementById('modeSwitch')
@@ -1543,22 +1592,30 @@
     const p=document.getElementById('modePicker')
     const sw=document.getElementById('modeSwitch')
     if(sw)sw.classList.add('show')
-    if(p)p.classList.add('show')
-    try{
-      const saved=localStorage.getItem('wos_mode')
-      if(saved)document.querySelectorAll('.mp-card').forEach(c=>c.classList.toggle('pre',c.dataset.mode===saved))
-    }catch(e){}
+    if(p){p.style.opacity='';p.classList.add('show')}
+    routeSync()
   }
+
+  // the router (entry.js) mirrors the visible state into the address bar
+  function routeSync(){if(window.WOS_ROUTER)WOS_ROUTER.sync()}
 
   // ===== DEEP LINK — e.g. /?mode=professional&open=work (return from Law Library) =====
   // Skips the workspace picker and lands on the requested workspace with the
   // requested windows already open, once the boot sequence has finished.
+  // Also takes the path routes: /workspace/<mode> and /app/<name> (see WOS_parseRoute).
   function launchFromURL(){
     let q
     try{q=new URLSearchParams(location.search)}catch(e){return false}
-    const m=q.get('mode')
+    let m=q.get('mode')
+    let open=(q.get('open')||'').split(',').filter(n=>n&&document.getElementById('w-'+n))
+    const r=window.WOS_parseRoute?WOS_parseRoute(location.pathname):{view:'room'}
+    if(!MODE_LABELS[m]&&r.view==='desk'){
+      const st=history.state&&history.state.wos
+      m=r.mode||(st&&st.m)||appMode(r.app)
+      open=st&&st.w&&st.w.length?st.w.slice():r.app?[r.app]:open
+    }
     if(!MODE_LABELS[m])return false
-    const open=(q.get('open')||'').split(',').filter(n=>n&&document.getElementById('w-'+n))
+    if(window.WOS_ROUTER)WOS_ROUTER.quiet(1400)
     const sw=document.getElementById('modeSwitch')
     if(sw)sw.classList.add('show')
     applyMode(m)
@@ -1566,6 +1623,16 @@
     document.getElementById('modePicker').classList.remove('show')
     setTimeout(()=>restoreSession(m,()=>{}),220)
     return true
+  }
+
+  // the workspace an app belongs to: its own if it has only one, else the last one used
+  function appMode(name){
+    const el=name&&document.getElementById('w-'+name)
+    const ms=(el&&el.dataset.modes||'both').split(',')
+    if(!ms.includes('both')&&MODE_LABELS[ms[0]])return ms[0]
+    if(MODE)return MODE
+    try{const s=localStorage.getItem('wos_mode');if(MODE_LABELS[s])return s}catch(e){}
+    return 'creative'
   }
 
   // ===== WINDOW MANAGEMENT =====
@@ -1757,6 +1824,7 @@
       a.classList.toggle('on',n in S.ow)
       if(active&&n===active)a.classList.add('on')
     })
+    routeSync()
   }
 
   // ===== START MENU =====
@@ -1847,7 +1915,7 @@
 
   // Console art
   console.log('%c┌───────────────────────┐','color:#6B9FFF')
-  console.log('%c│     Walker.OS v3       │','color:#6B9FFF;font-weight:700')
+  console.log('%c│   Walker.OS v 7.5.7    │','color:#6B9FFF;font-weight:700')
   console.log('%c│  Walker Birchfield     │','color:#b0b0ff')
   console.log('%c└───────────────────────┘','color:#6B9FFF')
 
@@ -1868,8 +1936,55 @@
     boot.style.opacity='0'
     void boot.offsetHeight
     boot.style.opacity='1'
-    // Reload page after animations complete
-    setTimeout(()=>{window.location.reload()},1200)
+    // start over at the landing once the fade has finished
+    setTimeout(()=>{window.location.assign('/')},1200)
+  }
+
+  // ===== UN-BOOT (browser Back from the desktop to the room) =====
+  // Puts the computer back to its off state and shows the room again, without a reload.
+  // The workspace sessions are kept, so going Forward again restores the same windows.
+  function unboot(){
+    if(S.bi===0&&!S.booted)return
+    if(S.booted&&MODE)snapshotSession(MODE)
+    Object.keys(S.ow).forEach(n=>{
+      const el=document.getElementById('w-'+n)
+      if(!el)return
+      if(n.startsWith('photoview-')){el.remove();return}
+      el.style.display='none'
+      el.classList.remove('o','mx','anim','cl')
+      el.style.transform='';el.style.transformOrigin='';el.style.opacity=''
+    })
+    S.ow={};S.mx={};S.mxPos={}
+    updateMxTabs()
+    document.querySelectorAll('.tb-app').forEach(a=>a.classList.remove('on'))
+    const picker=document.getElementById('modePicker')
+    picker.classList.remove('show');picker.style.opacity=''
+    const sw=document.getElementById('modeSwitch');if(sw)sw.classList.remove('show')
+    document.removeEventListener('keydown',kbd)
+    document.getElementById('desktop').classList.remove('in')
+    S.booted=false;S.bi=0;S.rebooted=true
+    // the monitor goes back to "click to boot"
+    const s=document.getElementById('screen'),os=document.getElementById('offState'),t=document.getElementById('term')
+    s.classList.remove('warm');document.getElementById('led').classList.remove('on')
+    os.style.display='';os.classList.remove('hide')
+    t.classList.remove('show');document.getElementById('bootLines').innerHTML=''
+    document.getElementById('cl').style.display=''
+    const b=document.getElementById('boot')
+    b.style.transition='';b.style.transform='';b.style.opacity=''
+    b.classList.remove('booting','hidden','direct')
+  }
+
+  // ===== DIRECT OPEN (a visit straight to /workspace or /app/<name>) =====
+  // Skips the room and the boot sequence: the desktop is shown at once, then the picker or the
+  // requested workspace and window.
+  function bootDirect(){
+    if(S.booted)return
+    document.getElementById('boot').classList.add('hidden','direct')
+    document.getElementById('led').classList.add('on')
+    document.getElementById('desktop').classList.add('in')
+    S.booted=true;S.bi=LINES.length
+    document.addEventListener('keydown',kbd)
+    if(!launchFromURL())showModePicker()
   }
 
   // ===== GALLERY NAV =====
@@ -1932,8 +2047,7 @@
 
   // 3D room never arrived (blocked CDN, slow network): show the 2D monitor instead of an empty room
   function fallback2D(){const b=document.getElementById('boot');if(!b.classList.contains('three-on'))b.classList.remove('three-pending')}
-  setTimeout(fallback2D,12000)
 </script>
-<script type="module" src="boot3d.js" onerror="fallback2D()"></script>
+<script src="entry.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,205 @@
+/* Walker.OS: entry gate, room modes and the workspace picker.
+   Loaded after polish.css. The landing and /explore are the same 3D room (boot3d.js);
+   #boot.exploring marks the free-roam mode (see entry.js). */
+
+/* ===== ROOM MODES ===== */
+#stage3d.still{cursor:default}
+#stage3d.still.hot{cursor:pointer}
+/* a direct visit to /workspace or /app/...: the boot screen starts out of the way, no zoom */
+#boot.direct{transition:none}
+
+/* ===== ENTRY GATE ===== */
+.explore-btn{position:absolute;top:20px;left:20px;z-index:6;display:flex;align-items:center;gap:10px;
+  padding:10px 16px 10px 12px;border-radius:999px;cursor:pointer;
+  font:500 12px/1 var(--font-ui);letter-spacing:.4px;color:var(--text);
+  background:rgba(20,24,44,.72);border:1px solid rgba(var(--accent-rgb),.28);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 0 rgba(var(--accent-rgb),0);
+  transition:transform .25s cubic-bezier(.16,1,.3,1),border-color .2s ease,background .2s ease,box-shadow .3s ease,opacity .3s ease;
+  animation:gate-in .7s cubic-bezier(.16,1,.3,1) .25s both}
+.explore-btn:hover{transform:translateY(-2px);border-color:rgba(var(--accent-rgb),.6);background:rgba(28,34,64,.82);
+  box-shadow:0 14px 34px rgba(0,0,0,.4),0 0 24px rgba(var(--accent-rgb),.22)}
+.explore-btn:active{transform:scale(.97)}
+.explore-btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.explore-btn .eb-ic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(var(--accent-rgb),.14);color:var(--accent);font-size:13px}
+.explore-btn .eb-t{display:flex;flex-direction:column;gap:4px;text-align:left}
+.explore-btn .eb-sub{font-size:9.5px;letter-spacing:.6px;color:var(--text-muted);opacity:.85}
+.explore-btn[hidden]{display:none}
+/* landing shows "Explore the room"; exploring swaps it for "Back to the desk" */
+.desk-btn{display:none}
+#boot.exploring .desk-btn{display:flex}
+#boot.exploring .explore-btn:not(.desk-btn){display:none}
+/* a poster or window close-up puts its own "Back to room" button in the same corner */
+#boot:has(.room-back.show) .desk-btn{opacity:0;visibility:hidden;pointer-events:none}
+/* gone while the room loads or once the computer has started to boot */
+#boot.three-pending .explore-btn,#boot.booting .explore-btn,
+#boot.hidden .explore-btn{animation:none;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-6px);
+  transition:opacity .3s ease,transform .3s ease,visibility 0s linear .3s}
+
+/* loading indicator */
+.room-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;display:none;
+  flex-direction:column;align-items:center;gap:14px;font:500 11px/1 var(--font-ui);letter-spacing:2px;
+  text-transform:uppercase;color:var(--text-muted)}
+.room-loading .rl-ring{width:34px;height:34px;border-radius:50%;border:2px solid rgba(var(--accent-rgb),.18);
+  border-top-color:var(--accent);animation:rl-spin .9s linear infinite}
+#boot.three-pending .room-loading{display:flex}
+@keyframes rl-spin{to{transform:rotate(360deg)}}
+@keyframes gate-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+/* 2D fallback: a soft desk-lamp pool behind the monitor so it still reads as a room */
+#boot:not(.three-on):not(.three-pending){
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 58%,rgba(var(--accent-rgb),.10),transparent 70%),
+    radial-gradient(ellipse 120% 60% at 50% 110%,rgba(0,0,0,.55),transparent 60%),
+    linear-gradient(180deg,#10101f,#141428 55%,#0c0c18)}
+
+@media(max-width:640px){
+  .explore-btn{top:12px;left:12px;padding:8px 12px 8px 9px}
+  .explore-btn .eb-sub{display:none}
+}
+
+/* ===== WORKSPACE PICKER: dark icy OS =====
+   Deep obsidian ground with a slow cool aurora, a frosted dark menu bar, dark glass cards and
+   3D icons drawn by picker-icons.js (the flat badges stay as the fallback).
+   --metal / --metal-sheen are the one metallic finish shared by the 3D W and the workspace labels. */
+#modePicker{--ink:234,244,255;--ink2:143,163,184;--cyan:127,212,255;--ice:186,226,255;--tile:104px;
+  --metal:linear-gradient(180deg,#ffffff 0%,#dcecf9 22%,#9db6cc 44%,#5f7890 52%,#c4dbee 64%,#eef7ff 80%,#8aa4bb 100%);
+  --metal-sheen:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.95) 46%,rgba(190,235,255,.35) 54%,transparent 66%);
+  --metal-depth:drop-shadow(0 1px 0 rgba(0,0,0,.55)) drop-shadow(0 6px 14px rgba(0,0,0,.45)) drop-shadow(0 0 16px rgba(var(--cyan),.18));
+  overflow:hidden;font-family:var(--font-body,Inter,system-ui,sans-serif);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 38%,rgba(40,90,150,.22),transparent 70%),
+    linear-gradient(170deg,#070b12 0%,#0b1220 46%,#05070c 100%)}
+.mp-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.mp-orb{position:absolute;border-radius:50%;filter:blur(80px);will-change:transform}
+.mp-orb.a{width:52vmax;height:52vmax;left:-16vmax;top:-20vmax;opacity:.5;background:radial-gradient(circle,rgba(70,160,255,.55),transparent 68%);
+  animation:mp-drift-a 26s ease-in-out infinite alternate}
+.mp-orb.b{width:46vmax;height:46vmax;right:-16vmax;bottom:-22vmax;opacity:.45;background:radial-gradient(circle,rgba(90,220,255,.4),transparent 68%);
+  animation:mp-drift-b 32s ease-in-out infinite alternate}
+.mp-orb.c{width:30vmax;height:30vmax;left:50%;top:44%;margin:-15vmax 0 0 -15vmax;opacity:.35;background:radial-gradient(circle,rgba(150,200,255,.35),transparent 70%);
+  animation:mp-drift-c 22s ease-in-out infinite alternate}
+@keyframes mp-drift-a{to{transform:translate(8vmax,6vmax) scale(1.08)}}
+@keyframes mp-drift-b{to{transform:translate(-7vmax,-5vmax) scale(1.12)}}
+@keyframes mp-drift-c{to{transform:translate(4vmax,-3vmax) scale(.9)}}
+.mp-inner{position:relative;z-index:1}
+.mp-gl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+
+/* menu bar */
+.mp-bar{position:absolute;top:0;left:0;right:0;height:34px;z-index:1;display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;font:500 12.5px/1 var(--font-body,Inter,system-ui,sans-serif);color:rgb(var(--ink));
+  background:rgba(14,20,32,.55);border-bottom:1px solid rgba(var(--ice),.08);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4)}
+.mp-bar-l{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:.1px}
+.mp-bar-l img{width:18px;height:16px;object-fit:contain}
+.mp-bar-r{font-variant-numeric:tabular-nums;color:rgb(var(--ink2))}
+
+/* headings */
+#modePicker .mp-kicker{font:600 11px/1 var(--font-body,Inter,system-ui,sans-serif);letter-spacing:2.6px;color:rgb(var(--cyan));opacity:.95}
+#modePicker .mp-title{font-family:var(--font-body,Inter,system-ui,sans-serif);font-size:36px;font-weight:700;letter-spacing:-.9px;
+  color:rgb(var(--ink));text-shadow:0 2px 24px rgba(0,0,0,.4);margin:10px 0 6px}
+#modePicker .mp-lead{font-family:var(--font-body,Inter,system-ui,sans-serif);font-size:13.5px;color:rgb(var(--ink2));margin-bottom:34px}
+
+/* ----- 3D logo: stacked steel layers, a metal face and a moving sheen ----- */
+.mp-logo3d{width:104px;height:94px;margin:0 auto 20px;perspective:700px;position:relative}
+.mp-logo3d::after{content:'';position:absolute;left:16%;right:16%;bottom:-14px;height:12px;border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(var(--cyan),.3),transparent 70%);filter:blur(4px);
+  animation:l3d-shadow 7s ease-in-out infinite}
+.l3d{position:absolute;inset:0;transform-style:preserve-3d;
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .6s cubic-bezier(.16,1,.3,1)}
+.l3d-spin{position:absolute;inset:0;transform-style:preserve-3d;animation:l3d-sway 8s ease-in-out infinite}
+.l3d-layer,.l3d-sheen{position:absolute;inset:0;backface-visibility:visible;
+  -webkit-mask:url(assets/logo-w-transparent.png) center/contain no-repeat;mask:url(assets/logo-w-transparent.png) center/contain no-repeat}
+.l3d-layer{background:var(--c,#2a3644)}
+.l3d-face{background:var(--metal)}
+.l3d-sheen{background:var(--metal-sheen) 0 0/250% 100%;mix-blend-mode:screen;animation:l3d-sheen 6s ease-in-out infinite}
+.mp-logo3d{filter:var(--metal-depth)}
+@keyframes l3d-sway{0%,100%{transform:rotateY(-18deg) rotateX(5deg)}50%{transform:rotateY(18deg) rotateX(-3deg)}}
+@keyframes l3d-sheen{0%,15%{background-position:120% 0}55%,100%{background-position:-60% 0}}
+@keyframes l3d-shadow{0%,100%{transform:scaleX(.86);opacity:.8}50%{transform:scaleX(1);opacity:1}}
+
+/* ----- entrance ----- */
+#modePicker.show .mp-inner>*{animation:mp-rise .7s cubic-bezier(.16,1,.3,1) both}
+#modePicker.show .mp-inner>:nth-child(2){animation-delay:.05s}
+#modePicker.show .mp-inner>:nth-child(3){animation-delay:.1s}
+#modePicker.show .mp-inner>:nth-child(4){animation-delay:.15s}
+#modePicker.show .mp-inner>:nth-child(5){animation-delay:.2s}
+#modePicker.show .mp-bar{animation:mp-fade .8s ease .1s both}
+#modePicker.show .mp-gl{animation:mp-fade .9s ease .25s both}
+@keyframes mp-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes mp-fade{from{opacity:0}to{opacity:1}}
+
+/* ----- cards: dark frosted glass ----- */
+#modePicker .mp-row{gap:28px}
+#modePicker .mp-card,#modePicker .mp-card[data-mode]{position:relative;width:214px;padding:24px 18px 22px;border-radius:24px;
+  background:linear-gradient(180deg,rgba(28,38,56,.62),rgba(14,20,32,.62));border:1px solid rgba(var(--ice),.12);
+  -webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:inset 0 1px 0 rgba(var(--ice),.10),0 18px 40px rgba(0,0,0,.45);
+  transform:none;outline:none;
+  transition:transform .45s cubic-bezier(.16,1,.3,1),background .3s ease,border-color .3s ease,box-shadow .45s cubic-bezier(.16,1,.3,1)}
+.mp-card[data-mode="creative"]{--mode:214,58,48}
+.mp-card[data-mode="professional"]{--mode:226,178,58}
+/* the flat badge (fallback, and what the zoom grows from). The bottom margin leaves room for the
+   3D icon's ground shadow (picker-icons.js SHADOW_Y), so the label sits just below it. */
+#modePicker .mp-tile{width:var(--tile);height:var(--tile);margin:0 auto calc(var(--tile) * .4);border-radius:50%;border:none;background:none;overflow:visible;
+  transition:transform .45s cubic-bezier(.16,1,.3,1),opacity .4s ease}
+#modePicker .mp-tile img{border-radius:50%;box-shadow:0 12px 28px rgba(0,0,0,.5);transition:opacity .5s ease}
+#modePicker .mp-glyph{color:rgb(var(--mode,var(--cyan)))}
+#modePicker.mp-3d .mp-tile img,#modePicker.mp-3d .mp-tile .mp-glyph{opacity:0}
+
+/* labels: the same metal as the W (gradient, moving sheen, depth) */
+#modePicker .mp-name{display:inline-block;margin:0;font-size:17px;font-weight:700;letter-spacing:.2px;
+  color:transparent;-webkit-text-fill-color:transparent;
+  background:var(--metal-sheen) 120% 0/250% 100% no-repeat,var(--metal);
+  -webkit-background-clip:text;background-clip:text;filter:var(--metal-depth);
+  animation:mp-name-sheen 6s ease-in-out infinite}
+.mp-card[data-mode="professional"] .mp-name{animation-delay:.8s}
+@keyframes mp-name-sheen{0%,15%{background-position:120% 0,0 0}55%,100%{background-position:-60% 0,0 0}}
+#modePicker .mp-name::before{content:none}
+/* a short workspace-colour rule under the label */
+#modePicker .mp-card::after{content:'';position:absolute;left:50%;bottom:14px;width:22px;height:2px;margin-left:-11px;border-radius:2px;
+  background:rgb(var(--mode));box-shadow:0 0 10px rgba(var(--mode),.7);opacity:.75;transition:width .35s ease,margin .35s ease,opacity .3s ease}
+
+/* hover (only once the picker is armed: see entry.js) */
+#modePicker .mp-card:hover{transform:none;background:linear-gradient(180deg,rgba(28,38,56,.62),rgba(14,20,32,.62));border-color:rgba(var(--ice),.12);
+  box-shadow:inset 0 1px 0 rgba(var(--ice),.10),0 18px 40px rgba(0,0,0,.45)}
+@media (hover:hover){
+  #modePicker.mp-armed .mp-card:hover{transform:translateY(-6px);background:linear-gradient(180deg,rgba(34,48,70,.72),rgba(16,24,38,.72));
+    border-color:rgba(var(--cyan),.45);box-shadow:inset 0 1px 0 rgba(var(--ice),.16),0 0 0 4px rgba(var(--cyan),.08),0 0 34px rgba(var(--cyan),.14),0 26px 50px rgba(0,0,0,.55)}
+  #modePicker.mp-armed .mp-card:hover::after{width:44px;margin-left:-22px;opacity:1}
+  #modePicker.mp-armed:not(.mp-3d) .mp-card:hover .mp-tile{transform:translateY(-4px) scale(1.05)}
+}
+#modePicker .mp-card:focus-visible{transform:translateY(-6px);border-color:rgba(var(--cyan),.6);
+  box-shadow:inset 0 1px 0 rgba(var(--ice),.16),0 0 0 3px rgba(var(--cyan),.45),0 26px 50px rgba(0,0,0,.55)}
+#modePicker .mp-card:active{transform:translateY(-2px) scale(.985)}
+#modePicker .mp-card.chosen{border-color:rgba(var(--cyan),.7)}
+
+@media(max-width:600px){
+  #modePicker{--tile:80px}
+  #modePicker .mp-card,#modePicker .mp-card[data-mode]{width:152px;padding:18px 12px 20px;border-radius:20px}
+  #modePicker .mp-name{font-size:15px}
+  #modePicker .mp-title{font-size:26px}
+  #modePicker .mp-row{gap:16px}
+}
+
+/* ===== IN-OS SWITCHER (top left) ===== */
+.ms-btn{position:relative}
+.ms-btn[data-mode-btn="creative"]{--glow:207,58,51}
+.ms-btn[data-mode-btn="professional"]{--glow:217,185,106}
+.ms-btn:hover{opacity:1;box-shadow:0 0 0 1px rgba(var(--glow,140,180,255),.4),0 0 18px rgba(var(--glow,140,180,255),.3)}
+.ms-btn.on{box-shadow:0 0 0 1.5px rgba(var(--glow,140,180,255),.7),0 0 20px rgba(var(--glow,140,180,255),.35)}
+.ms-btn:focus-visible{outline:2px solid rgb(var(--glow,140,180,255));outline-offset:3px}
+
+@media (prefers-reduced-motion: reduce){
+  .l3d-spin,.l3d-sheen,.mp-logo3d::after,.mp-orb,#modePicker .mp-name{animation:none}
+  .l3d-spin{transform:rotateY(-14deg) rotateX(4deg)}
+}
+
+/* dev only (local server or ?dev): export the room as a .glb, shown while exploring */
+.room-export{display:none;position:absolute;left:20px;bottom:24px;z-index:6;padding:8px 14px;border-radius:999px;cursor:pointer;
+  font:500 11px/1 var(--font-ui);letter-spacing:.4px;color:var(--text);background:rgba(20,24,44,.72);
+  border:1px dashed rgba(var(--accent-rgb),.45);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.room-export:hover{border-style:solid}
+.room-export:disabled{opacity:.6;cursor:default}
+#boot.exploring.three-on:not(.booting):not(.hidden) .room-export{display:block}
+@media (pointer:coarse){.room-export{bottom:auto;top:64px}}

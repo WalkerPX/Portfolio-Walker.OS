@@ -8,6 +8,8 @@
 import * as THREE from 'three'
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { assignNames, exportRoom } from './room-export.js'
+import { applyRoomEdits } from './room-edits.js'
 
 const bootEl = document.getElementById('boot')
 const screenEl = document.getElementById('screen')
@@ -41,6 +43,13 @@ const PLATE_X = 0.6, PLATE_Z = R2.back + 3.8, MOUND_DIST = 8.5
 // Three lanes run toward +z; a crowd riser stands behind the approaches. LANE.foul is the foul line z.
 const BW = { l: R2.r, r: R2.r + 13, back: R2.back + 7, front: R2.front + 18, floor: R2.floor, ceil: R2.ceil }
 const BW_OPEN = [R2.back + 9, R2.back + 15.6], BW_OPEN_H = 3.9
+// the arch into the bowling wing. The wing and its game are still built; with this off the ballpark's
+// right wall is solid and the wing can't be walked into. Flip to true to reopen it.
+const BOWLING_OPEN = false
+// an edited copy of the exported room (see assets/room/README.md). When set, its changes are laid
+// over the procedural room as it builds: moved, rotated, rescaled, reshaped, recoloured, deleted and
+// added objects. Leave empty to use the room exactly as the code builds it.
+const ROOM_EDITS_URL = ''
 const LANE = { w: 1.8, gut: 0.38, len: 19, foul: R2.back + 17.6, x: [10.6, 13.5, 16.4], play: 1 }
 const HEAD_Z = LANE.foul + LANE.len, DECK_END = HEAD_Z + 1.7, PIN_R = 0.1, BOWL_R = 0.186
 const CROWD_Z = BW.back + 1.15 // where the spectators stand on the riser
@@ -158,6 +167,13 @@ async function init() {
     parent.add(g)
     return g
   }
+  // export bookkeeping (room-export.js): each object added to the scene root is filed under the
+  // section that built it; section(name) closes the section that just ended
+  let sectionMark = 0
+  const section = (name) => {
+    for (let i = sectionMark; i < scene.children.length; i++) scene.children[i].userData.section ??= name
+    sectionMark = scene.children.length
+  }
   // wall orientation: rotation that turns a +z-facing plane toward the room
   const FACE = { back: 0, front: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }
   const onWall = (wall, along, y) => {
@@ -232,6 +248,7 @@ async function init() {
   doorSign.rotation.y = Math.PI
   doorSign.material.emissiveIntensity = 0.9
 
+  section('Room')
   // ---------- second room: indoor mini ballpark + half court ----------
   const turfMat = std('#1f4a2a', 0.95, 0, { map: canvasTex(512, 512, drawTurf) })
   turfMat.map.wrapS = turfMat.map.wrapT = THREE.RepeatWrapping
@@ -253,7 +270,10 @@ async function init() {
   }
   // right wall: shared with the bowling wing (seen from both sides), with the arch cut through it
   const wall2b = std('#141a24', 0.92, 0, { side: THREE.DoubleSide })
-  for (const [z0, z1, y0, y1] of [[R2.back, BW_OPEN[0], R2.floor, R2.ceil], [BW_OPEN[1], R2.front, R2.floor, R2.ceil], [BW_OPEN[0], BW_OPEN[1], R2.floor + BW_OPEN_H, R2.ceil]]) {
+  const wall2bParts = BOWLING_OPEN
+    ? [[R2.back, BW_OPEN[0], R2.floor, R2.ceil], [BW_OPEN[1], R2.front, R2.floor, R2.ceil], [BW_OPEN[0], BW_OPEN[1], R2.floor + BW_OPEN_H, R2.ceil]]
+    : [[R2.back, R2.front, R2.floor, R2.ceil]]
+  for (const [z0, z1, y0, y1] of wall2bParts) {
     const m = add(new THREE.PlaneGeometry(z1 - z0, y1 - y0), wall2b, R2.r, (y0 + y1) / 2, (z0 + z1) / 2, scene, false)
     m.rotation.y = FACE.right
     blockers.push(m)
@@ -291,6 +311,7 @@ async function init() {
   for (const [x, z] of [[-2.0, -0.6], [2.5, -0.6], [-2.0, 1.2], [2.5, 1.2]]) add(new THREE.BoxGeometry(0.07, 1.1, 0.07), deskMat, x, -0.63, z)
   add(rbox(1.9, 0.006, 0.7, 0.003), std('#0b0b18', 0.95, 0), -0.05, 0.003, 0.95, scene, false)
 
+  section('Ballpark')
   // ---------- computer (no branding) ----------
   const computer = new THREE.Group()
   computer.userData.kind = 'computer'
@@ -325,6 +346,7 @@ async function init() {
   const mouse = add(new THREE.SphereGeometry(1, 24, 16), shellDark, 1.08, 0.03, 0.92, computer)
   mouse.scale.set(0.075, 0.035, 0.115)
 
+  section('Computer')
   // ---------- desk objects ----------
   // camera (photography)
   const cam = group(-1.3, 0, 0.55, 0.5)
@@ -407,6 +429,7 @@ async function init() {
   plant(ROOM.r - 0.65, ROOM.floor, -1.15, 1.5)
   plant(ROOM.l + 0.75, ROOM.floor, 5.6, 1.3)
 
+  section('Desk')
   // ---------- back wall: shelf, posters, light switch ----------
   const shelf = group(-2.55, 0.85, ROOM.back + 0.14)
   add(new THREE.BoxGeometry(1.25, 0.04, 0.26), deskMat, 0, 0, 0, shelf)
@@ -454,6 +477,7 @@ async function init() {
   const rocker = add(rbox(0.065, 0.12, 0.03, 0.01), std('#eef1f8', 0.35, 0.05), 0, 0, 0.022, sw, false)
   add(new THREE.PlaneGeometry(0.3, 0.0375), labelMat('LIGHTS', { color: '#ffb547', w: 512, h: 64 }), 0, -0.22, 0.004, sw, false).material.emissiveIntensity = 0.8
 
+  section('BackWall')
   // ---------- right wall: skate decks, cap ----------
   skateDeck(0.05, 1.65, 0.1, canvasTex(256, 1024, drawDeckA))
   skateDeck(0.95, 1.6, -0.08, canvasTex(256, 1024, drawDeckB))
@@ -464,6 +488,7 @@ async function init() {
   const brim = add(new THREE.CylinderGeometry(0.13, 0.13, 0.01, 24, 1, false, -Math.PI / 2, Math.PI), std(P.crimson, 0.8, 0), 0, 0.0, 0.2, capG)
   brim.rotation.x = -0.15
 
+  section('RightWall')
   // ---------- second room, back wall (behind home plate): mini hoop + ball ----------
   const hoop = group(HOOP_X, 1.95, R2.back, FACE.back)
   add(rbox(0.9, 0.6, 0.03, 0.01), std('#1f1f38', 0.5, 0.1, { map: canvasTex(450, 300, drawBackboard) }), 0, 0, 0.05, hoop)
@@ -551,6 +576,7 @@ async function init() {
     if (origin === RIM) swish = 1
   }
 
+  section('Hoop')
   // ---------- home run derby (second room): plate by the doorway, machine out on the mound ----------
   const MOUND_H = 0.22
   const PLATE = new THREE.Vector3(PLATE_X, R2.floor, PLATE_Z)
@@ -663,6 +689,7 @@ async function init() {
   batArm.add(bat)
   batPivot.visible = false
 
+  section('HomeRunDerby')
   // ---------- bowling wing: shell, three lanes, pin decks, crowd riser, ball returns ----------
   const BW_W = BW.r - BW.l, BW_D = BW.front - BW.back, BW_H = BW.ceil - BW.floor
   const BW_MID = { x: (BW.l + BW.r) / 2, z: (BW.back + BW.front) / 2, y: (BW.floor + BW.ceil) / 2 }
@@ -707,15 +734,17 @@ async function init() {
   add(new THREE.BoxGeometry(0.04, 0.04, BW_D - 0.4), neonCyan, BW.r - 0.03, BW.floor + 2.95, BW_MID.z, scene, false)
   add(new THREE.BoxGeometry(BW_W - 0.4, 0.06, 0.04), neonPink, BW_MID.x, BW.floor + 3.1, BW.back + 0.03, scene, false)
   // the arch from the ballpark: casing on both faces and a sign over it on the ballpark side
-  for (const [x, ry] of [[R2.r, FACE.right], [R2.r, FACE.left]]) {
+  if (BOWLING_OPEN) for (const [x, ry] of [[R2.r, FACE.right], [R2.r, FACE.left]]) {
     const arch = group(x, R2.floor, (BW_OPEN[0] + BW_OPEN[1]) / 2, ry)
     const ow = BW_OPEN[1] - BW_OPEN[0]
     for (const [w, h, ax, ay] of [[ow + 0.2, 0.12, 0, BW_OPEN_H + 0.06], [0.12, BW_OPEN_H + 0.12, -(ow / 2 + 0.05), (BW_OPEN_H + 0.12) / 2], [0.12, BW_OPEN_H + 0.12, ow / 2 + 0.05, (BW_OPEN_H + 0.12) / 2]])
       add(new THREE.BoxGeometry(w, h, 0.1), frameMat, ax, ay, 0.05, arch)
   }
-  const bwSign = add(new THREE.PlaneGeometry(2.2, 0.3), labelMat('LANES  →', { color: '#ff6fae', w: 768, h: 104 }), R2.r - 0.02, R2.floor + BW_OPEN_H + 0.5, (BW_OPEN[0] + BW_OPEN[1]) / 2, scene, false)
-  bwSign.rotation.y = FACE.right
-  bwSign.material.emissiveIntensity = 1.1
+  if (BOWLING_OPEN) {
+    const bwSign = add(new THREE.PlaneGeometry(2.2, 0.3), labelMat('LANES  →', { color: '#ff6fae', w: 768, h: 104 }), R2.r - 0.02, R2.floor + BW_OPEN_H + 0.5, (BW_OPEN[0] + BW_OPEN[1]) / 2, scene, false)
+    bwSign.rotation.y = FACE.right
+    bwSign.material.emissiveIntensity = 1.1
+  }
 
   // lanes: maple bed flush with the floor from the foul line through the pin deck, half-pipe gutters,
   // cappings between them, wooden approaches back toward the riser
@@ -769,6 +798,7 @@ async function init() {
   const stripeGeo = new THREE.CylinderGeometry(0.0445, 0.0475, 0.018, 20, 1, true)
   const makePin = () => {
     const p = new THREE.Group()
+    p.name = 'Pin'
     const body = new THREE.Mesh(pinGeo, pinM)
     body.castShadow = true
     p.add(body)
@@ -849,6 +879,7 @@ async function init() {
   aimArrow.renderOrder = 3
   scene.add(aimArrow)
 
+  section('BowlingWing')
   // ---------- avatars: one stylised body (22, athletic, dark hair, full beard), dressed per outfit ----------
   const AV = {
     torso: new THREE.CylinderGeometry(0.33, 0.29, 0.86, 28),
@@ -895,6 +926,8 @@ async function init() {
   function makeAvatar(key) {
     const o = OUTFITS[key]
     const root = new THREE.Group(), body = new THREE.Group()
+    root.name = 'Avatar_' + key
+    body.name = 'Body'
     root.add(body)
     const part = (geo, mat, x, y, z, parent = body) => {
       const m = new THREE.Mesh(geo, mat)
@@ -1001,12 +1034,14 @@ async function init() {
     return av
   })
 
+  section('Avatars')
   // ---------- windows + the scenes outside ----------
   // each window is a click target: a close-up framing that brings the scene outside to life
   const windowGroups = [windowFrame('left', 'Nighthawks'), windowFrame('right', 'The Starry Night')]
   const outsideLeft = nighthawks()
   const sky = starryNight()
 
+  section('Windows')
   // ---------- lights ----------
   const hemi = new THREE.HemisphereLight('#2e3a6e', '#030305', 0.5)
   scene.add(hemi)
@@ -1045,6 +1080,7 @@ async function init() {
   screenLight.position.set(0, 1.15, 0.7)
   scene.add(screenLight)
 
+  section('Lights')
   // ---------- the live #screen on the glass ----------
   const holder = document.createElement('div')
   holder.className = 'screen3d'
@@ -1063,6 +1099,32 @@ async function init() {
   bootEl.classList.add('three-on')
   bootEl.classList.remove('three-pending')
 
+  section('Screen')
+  // readable names for the exported room (room-export.js); every other object gets a generated one
+  Object.entries({
+    Floor: floor, Ceiling: ceil, Wall_Back: back, Wall_Left: lw, Wall_Right: rw, Rug: rug, DoorSign: doorSign,
+    Ballpark_Turf: f2, Ballpark_Ceiling: c2, Ballpark_Fence: fence, Ballpark_Infield: fieldM, Ballpark_Light: hemi2,
+    Computer: computer, Monitor: monitor, Tower: tower, Tower_PowerButton: pb, Tower_Vents: vents,
+    Keyboard: kb, Keyboard_Keys: keys, Mouse: mouse, Camera: cam, Books: books, Notepads: pads, Notepad_Sheet: sheet,
+    Pen: pen, Clipboard: clip, Clipboard_Report: rep, Mug: mug, MousePad: pad, DeskLamp: lamp, DeskLamp_Light: lampLight,
+    Router: router, Baseball: baseball, Shelf: shelf, Football: fb, Shelf_LightStrip: strip,
+    LightSwitch: sw, LightSwitch_Rocker: rocker, Cap: capG, Cap_Crown: crown, Cap_Brim: brim,
+    Hoop: hoop, Hoop_Net: net, Hoop_Ticker: ticker, Basketball: ball, Hoop_Confetti: confetti, Hoop_Flash: flash,
+    Derby: derbyKit, Derby_Machine: mach, Derby_Scoreboard: board, Derby_HomePlate: plate, Derby_PlateGlow: plateGlow,
+    Derby_AimRing: aimRing, Derby_ZoneLine: zoneLine, Derby_PitchBall: pitchBall, Derby_SeamRing: seamRing,
+    Derby_DestRing: destRing, Derby_BatPivot: batPivot, Derby_Bat: bat,
+    Bowling_Ceiling: bwCeil, Bowling_OuterWall: bwOuter, Bowling_Masking: mask, Bowling_Curtain: curtain,
+    Bowling_Ball: bowlBall, Bowling: bowlKit, Bowling_Scoreboard: lcd, Bowling_LaneSpot: laneSpot, Bowling_AimArrow: aimArrow,
+    Light_Hemisphere: hemi, Light_Key: key, Light_Wash: wash, Light_CeilingFill: fill, Light_Fill2: fill2,
+    Light_Moon: moon, Light_DinerSpill: dinerSpill, Light_Rim: rim, Light_Screen: screenLight, Screen: cutout,
+  }).forEach(([n, o]) => { if (o && o.isObject3D && !o.name) o.name = n })
+  if (bowler?.isObject3D) bowler.name = 'Bowler'
+  // unique, stable names for everything (the export and an edited re-import match nodes by name)
+  assignNames(scene)
+  if (ROOM_EDITS_URL) {
+    try { await applyRoomEdits({ scene, url: ROOM_EDITS_URL }) }
+    catch (err) { console.warn('[boot3d] room edits not applied:', err) }
+  }
   // ---------- camera rig ----------
   // yaw/pitch: forward = -(sin yaw · cos pitch, sin pitch, cos yaw · cos pitch)
   const cur = { yaw: WALK.yaw0, pitch: WALK.pitch0 }
@@ -1070,6 +1132,11 @@ async function init() {
   // h/vy: height above standing eye level and vertical speed; jumpBuf: time left on a queued jump
   const me = { p: WALK.home.clone(), v: new THREE.Vector3(), h: 0, vy: 0, grounded: true, jumpBuf: 0, land: 0 }
   const pressed = new Set()
+  // explore: walking, mouse look and the room's activities are unlocked. Off (the landing), the
+  // camera stays anchored at the desk view and only the computer responds; the cursor adds a
+  // slight parallax so the room still feels live.
+  let explore = !!window.WOS_EXPLORE
+  const parallax = { x: 0, y: 0 }
   // floor-plan obstacles the walker slides around: boxes [x0, z0, x1, z1] and posts [x, z, r]
   const SOLIDS = [[-2.15, -0.75, 2.65, 1.35], [HOOP_X - 0.5, R2.back, HOOP_X + 0.5, R2.back + 0.62],
     [PLATE_X - 0.42, PLATE_Z + MOUND_DIST - 0.4, PLATE_X + 0.42, PLATE_Z + MOUND_DIST + 0.45],
@@ -1079,7 +1146,7 @@ async function init() {
   // into it, each [x0, z0, x1, z1]
   const AREAS = [[ROOM.l, ROOM.back, ROOM.r, ROOM.front], [R2.l, R2.back, R2.r, R2.front],
     [DOOR_X - DOOR_W / 2, ROOM.front - 1, DOOR_X + DOOR_W / 2, R2.back + 1],
-    [BW.l, BW.back, BW.r, LANE.foul], [R2.r - 1, BW_OPEN[0], BW.l + 1, BW_OPEN[1]]]
+    ...(BOWLING_OPEN ? [[BW.l, BW.back, BW.r, LANE.foul], [R2.r - 1, BW_OPEN[0], BW.l + 1, BW_OPEN[1]]] : [])]
   const inRoom2 = (p) => p.z > ROOM.front + WALL_T / 2
   const POSTS = [[ROOM.r - 0.65, -1.15, 0.45], [ROOM.l + 0.75, 5.6, 0.42]]
   function collide(p) {
@@ -1171,7 +1238,7 @@ async function init() {
   const SENS = 0.0019 // radians per pixel of mouse travel
   const locked = () => document.pointerLockElement === stage
   const lockLook = () => {
-    if (!LOCKABLE || aiming() || !roomLive()) return
+    if (!explore || !LOCKABLE || aiming() || !roomLive()) return
     try { stage.requestPointerLock()?.catch?.(() => {}) } catch { /* not allowed right now */ }
   }
   // fallback where capture is refused (some embedded browsers): the view still follows mouse
@@ -1216,6 +1283,13 @@ async function init() {
 
   stage.addEventListener('pointerdown', (e) => {
     if (booting) return
+    if (!explore) {
+      // anchored landing: the computer is the only thing that answers a click
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      const o = pick(e.clientX, e.clientY)
+      if (o?.userData.kind === 'computer' && !on && typeof window.boot === 'function') window.boot()
+      return
+    }
     if (derby) { if (e.button === 0 || e.pointerType !== 'mouse') derbyPointer(e, true); return }
     if (bowl) { if (e.button === 0 || e.pointerType !== 'mouse') bowlPointer(e, 'down'); return }
     if (e.pointerType === 'mouse' && LOCKABLE) {
@@ -1234,6 +1308,14 @@ async function init() {
     drag = pointers.size === 1 ? { x: e.clientX, y: e.clientY, yaw: tgt.yaw, pitch: tgt.pitch, moved: false } : null
   })
   stage.addEventListener('pointermove', (e) => {
+    if (!explore) {
+      if (booting || e.pointerType !== 'mouse') return
+      const r = stage.getBoundingClientRect()
+      parallax.x = (e.clientX - r.left) / r.width - 0.5
+      parallax.y = (e.clientY - r.top) / r.height - 0.5
+      const o = pick(e.clientX, e.clientY)
+      return setHover(o?.userData.kind === 'computer' ? o : null)
+    }
     if (derby) return derbyPointer(e, false)
     if (bowl) return bowlPointer(e, 'move')
     if (aiming() && e.pointerType === 'mouse') {
@@ -1274,7 +1356,7 @@ async function init() {
   }
   stage.addEventListener('pointerup', release)
   stage.addEventListener('pointercancel', (e) => { if (bowl) bowlPointer(e, 'cancel'); pointers.delete(e.pointerId); drag = null; stage.classList.remove('dragging'); if (charge) releaseShot() })
-  stage.addEventListener('pointerleave', () => { if (!drag && !aiming()) setHover(null) })
+  stage.addEventListener('pointerleave', () => { parallax.x = parallax.y = 0; if (!drag && !aiming()) setHover(null) })
   // the view's zoom is fixed: the wheel does nothing in the room
   stage.addEventListener('wheel', (e) => e.preventDefault(), { passive: false })
   backEl.addEventListener('click', () => unfocus())
@@ -1294,7 +1376,7 @@ async function init() {
     }
     if (e.key === 'Escape' && freeLook) return unlockLook()
     if (e.key === 'Escape' && focusOn) return unfocus()
-    if (!roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
+    if (!explore || !roomLive() || e.ctrlKey || e.metaKey || e.altKey) return
     if (e.target instanceof Element && e.target.closest('input,textarea,select,[contenteditable]')) return
     if (derby) { if (e.code === 'Space' && !(e.target instanceof Element && e.target.closest('button'))) e.preventDefault(); return } // batting: mouse only
     if (MOVE[e.code]) {
@@ -2476,8 +2558,13 @@ async function init() {
   let flickerUntil = 0
   const clock = new THREE.Clock()
   if (ledEl) new MutationObserver(() => {
+    const wasOn = on
     on = ledEl.classList.contains('on')
-    if (!on) return
+    if (!on) {
+      // the desktop was left (browser Back): pull the camera back out of the screen
+      if (wasOn) { booting = false; if (zoomT0 >= 0) { zoomT0 = -1; unzoomT0 = clock.elapsedTime } }
+      return
+    }
     flickerUntil = clock.elapsedTime + 0.7
     booting = true
     unfocus()
@@ -2491,9 +2578,54 @@ async function init() {
     Object.assign(tgt, { yaw: WALK.yaw0 + turns * Math.PI * 2, pitch: WALK.pitch0 })
   }).observe(ledEl, { attributes: true, attributeFilter: ['class'] })
 
-  let zoomT0 = -1
+  let zoomT0 = -1, unzoomT0 = -1
+  // back to the anchored desk view: leave any activity, release the mouse, turn to face the desk
+  // (the walk home happens in the loop)
+  const setExplore = (v) => {
+    v = !!v
+    if (v === explore) return
+    explore = v
+    stage.classList.toggle('still', !explore)
+    stage.setAttribute('aria-label', explore
+      ? 'Walker.OS room. Walk with W A S D or the arrow keys, drag to look, click the computer to boot.'
+      : 'Walker.OS room. Click the computer to boot.')
+    if (explore) { walked = false; return }
+    unfocus()
+    exitDerby(true)
+    exitBowl(true)
+    if (held) drop()
+    resetInput()
+    unlockLook()
+    setHover(null)
+    const turns = Math.round((cur.yaw - WALK.yaw0) / (Math.PI * 2))
+    Object.assign(tgt, { yaw: WALK.yaw0 + turns * Math.PI * 2, pitch: WALK.pitch0 })
+  }
+  stage.classList.toggle('still', !explore)
   // busy(): the room is mid-activity (batting or bowling), so keyboard shortcuts must not boot the computer
-  window.WOS3D = { zoom() { if (!REDUCE) zoomT0 = clock.elapsedTime }, busy: () => !!derby || !!bowl }
+  window.WOS3D = {
+    zoom() { if (!REDUCE) { zoomT0 = clock.elapsedTime; unzoomT0 = -1 } },
+    busy: () => !!derby || !!bowl,
+    setExplore,
+    get exploring() { return explore },
+    // the whole room as a .glb for Blender (room-export.js); resolves with the file's ArrayBuffer
+    exportRoom: (opts = {}) => exportRoom({ scene, renderer, ...opts }),
+  }
+  // on a local server (or with ?dev in the URL) a button exports the room while exploring
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) || new URLSearchParams(location.search).has('dev')) {
+    const exp = document.createElement('button')
+    exp.type = 'button'
+    exp.className = 'room-export'
+    exp.textContent = 'Export room (.glb)'
+    exp.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      exp.disabled = true
+      exp.textContent = 'Exporting…'
+      try { await window.WOS3D.exportRoom(); exp.textContent = 'Exported ✓' }
+      catch (err) { console.error('[boot3d] export failed:', err); exp.textContent = 'Export failed' }
+      setTimeout(() => { exp.disabled = false; exp.textContent = 'Export room (.glb)' }, 2500)
+    })
+    bootEl.appendChild(exp)
+  }
   // ---------- once the desktop takes over: stop, and get out of the way ----------
   let raf = 0
   new MutationObserver(() => {
@@ -2505,11 +2637,12 @@ async function init() {
       me.v.set(0, 0, 0); me.vy = 0; me.h = 0; me.grounded = true
       for (const el of [cueEl, backEl, keysEl, padEl, crossEl, meterEl]) el.classList.remove('show')
       setTimeout(() => {
+        if (!bootEl.classList.contains('hidden')) return // already back in the room
         cancelAnimationFrame(raf)
         raf = 0
         stage.style.visibility = 'hidden'
       }, 1400)
-    } else if (!raf) { stage.style.visibility = ''; frame() }
+    } else if (!raf) { stage.style.visibility = ''; clock.getDelta(); frame() }
   }).observe(bootEl, { attributes: true, attributeFilter: ['class'] })
 
   // ---------- loop ----------
@@ -2631,12 +2764,23 @@ async function init() {
     const close = focused?.userData.kind === 'window' ? focusAmt : 0
     sky.tick(t, dt, focused === windowGroups[1] ? close : 0)
     outsideLeft.tick(t, dt, focused === windowGroups[0] ? close : 0)
+    // inspecting a window: the cross bars fade out so nothing blocks the scene, and come back on exit
+    for (const wg of windowGroups) {
+      const hide = focused === wg ? close : 0
+      for (const m of wg.userData.mullions) {
+        m.visible = hide < 0.98
+        m.scale.setScalar(1 - hide * 0.98)
+      }
+    }
 
     // look
     // light smoothing: removes mouse jitter without feeling laggy
-    const s = 1 - Math.exp(-dt * (aiming() ? 22 : 12))
-    cur.yaw += (tgt.yaw - cur.yaw) * s
-    cur.pitch += (tgt.pitch - cur.pitch) * s
+    // anchored landing: the cursor nudges the view a little (slower, so it drifts rather than snaps)
+    const still = !explore && !booting
+    const s = 1 - Math.exp(-dt * (still ? 3.5 : aiming() ? 22 : 12))
+    const pk = still && !REDUCE ? 1 : 0
+    cur.yaw += (tgt.yaw - parallax.x * 0.09 * pk - cur.yaw) * s
+    cur.pitch += (tgt.pitch + parallax.y * 0.05 * pk - cur.pitch) * s
     const y = cur.yaw, p = cur.pitch
     dir.set(Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p))
 
@@ -2644,8 +2788,8 @@ async function init() {
     const sy = Math.sin(cur.yaw), cy = Math.cos(cur.yaw)
     const ix = (pressed.has('KeyD') ? 1 : 0) - (pressed.has('KeyA') ? 1 : 0)
     const iz = (pressed.has('KeyW') ? 1 : 0) - (pressed.has('KeyS') ? 1 : 0)
-    if (booting) {
-      // auto-walk back to the desk view: settle onto the floor, no momentum
+    if (booting || !explore) {
+      // auto-walk back to the desk view (booting, or leaving explore): settle onto the floor, no momentum
       wish.subVectors(WALK.home, me.p).setY(0)
       if (wish.length() > 0.02) wish.multiplyScalar(Math.min(4, wish.length() * 3) / wish.length())
       else wish.set(0, 0, 0)
@@ -2734,6 +2878,13 @@ async function init() {
       const k = 1 - Math.pow(1 - Math.min(1, (t - zoomT0) / 1.1), 3)
       pos.lerp(zoomPos, k)
       look.lerp(SCREEN_POS, k)
+    } else if (unzoomT0 >= 0) {
+      // leaving the desktop: start inside the screen and ease back out to the room view
+      const u = Math.min(1, (t - unzoomT0) / 1.3)
+      const k = 1 - (1 - Math.pow(1 - u, 3))
+      pos.lerp(zoomPos, k)
+      look.lerp(SCREEN_POS, k)
+      if (u >= 1) unzoomT0 = -1
     }
     camera.position.copy(pos)
     camera.lookAt(look)
@@ -2824,12 +2975,13 @@ async function init() {
       : hoverKind === 'bowl' || onLane() ? 'Click to bowl · Walker Lanes'
       : hoverKind === 'window' ? 'Click to look closer'
       : hoverKind === 'switch' ? (lightsOn ? 'Click to dim the lights' : 'Click to brighten the room')
+      : !explore ? (booting ? null : enterCue)
       : cueAmt > 0.5 ? enterCue : LOCKABLE && !aiming() && !focusOn && !booting ? 'Click to look around' : null
     if (text && text !== shownText) cueText.textContent = text
     shownText = text
     cueEl.classList.toggle('show', !!text)
-    keysEl.classList.toggle('show', !booting && !on && !derby && !bowl && focusAmt < 0.5 && (!walked || t - walked < 4))
-    padEl.classList.toggle('show', COARSE && !booting && !on && !derby && !bowl && focusAmt < 0.5)
+    keysEl.classList.toggle('show', explore && !booting && !on && !derby && !bowl && focusAmt < 0.5 && (!walked || t - walked < 4))
+    padEl.classList.toggle('show', explore && COARSE && !booting && !on && !derby && !bowl && focusAmt < 0.5)
     padEl.classList.toggle('holding', held)
 
     renderer.render(scene, camera) // no post-processing: the scene renders sharp
@@ -2842,6 +2994,7 @@ async function init() {
   function poster(wall, along, y, w, h, tex, title, { glowTex = null, glow = null } = {}) {
     const g = group(...onWall(wall, along, y), FACE[wall])
     g.translateZ(0.02)
+    g.name = 'Poster_' + title
     add(new THREE.BoxGeometry(w + 0.05, h + 0.05, 0.03), frameMat, 0, 0, 0, g)
     const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, emissive: new THREE.Color('#ffffff'), emissiveMap: glowTex || tex, emissiveIntensity: glow ?? 0.1 })
     add(new THREE.PlaneGeometry(w, h), mat, 0, 0, 0.017, g, false)
@@ -2925,11 +3078,15 @@ async function init() {
 
   function windowFrame(side, title) {
     const g = group(...onWall(side, WIN.z, WIN.y), FACE[side])
+    g.name = 'Window_' + title
     const { w, h } = WIN
     // zoom: tighter framing than a poster
     Object.assign(g.userData, { kind: 'window', size: { w, h }, title, zoom: 0.44 })
-    const bars = [[w + 0.1, 0.06, 0, h / 2 + 0.03], [w + 0.1, 0.06, 0, -h / 2 - 0.03], [0.06, h + 0.12, w / 2 + 0.03, 0], [0.06, h + 0.12, -w / 2 - 0.03, 0], [0.035, h, 0, 0], [w, 0.035, 0, 0.15]]
+    const bars = [[w + 0.1, 0.06, 0, h / 2 + 0.03], [w + 0.1, 0.06, 0, -h / 2 - 0.03], [0.06, h + 0.12, w / 2 + 0.03, 0], [0.06, h + 0.12, -w / 2 - 0.03, 0]]
     for (const [bw, bh, x, y] of bars) add(new THREE.BoxGeometry(bw, bh, 0.06), frameMat, x, y, 0.02, g, false)
+    // the cross (mullion + transom) is kept separate so it can slide away while the scene is inspected
+    const mullions = [[0.035, h, 0, 0], [w, 0.035, 0, 0.15]].map(([bw, bh, x, y]) => add(new THREE.BoxGeometry(bw, bh, 0.06), frameMat, x, y, 0.02, g, false))
+    g.userData.mullions = mullions
     for (const [bw, bh, x, y] of [[w, 0.02, 0, h / 2], [w, 0.02, 0, -h / 2], [0.02, h, w / 2, 0], [0.02, h, -w / 2, 0]]) {
       add(new THREE.BoxGeometry(bw, bh, 0.3), wallMat, x, y, -0.15, g, false) // reveal
     }
@@ -2958,6 +3115,7 @@ async function init() {
   // and the Phillies cigar sign on the roof. Local frame: x = right as seen from the room, z = toward the room.
   function nighthawks() {
     const g = new THREE.Group()
+    g.name = 'Outside_Nighthawks'
     g.position.set(-10.8, -1.45, WIN.z)
     g.rotation.y = Math.PI / 2
     scene.add(g)
@@ -3181,16 +3339,20 @@ async function init() {
 
     // glass: long front, rounded nose, side return; no door anywhere on the street side
     const glassM = flat('#dcebcf', { transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })
-    putA(new THREE.PlaneGeometry(LEN, 2.0), glassM, LEN / 2, 0, 1.3)
+    const RUN = LEN - S_L, RUN_MID = (LEN + S_L) / 2 // the front starts where the floor does
+    putA(new THREE.PlaneGeometry(RUN, 2.0), glassM, RUN_MID, 0, 1.3)
     put(new THREE.CylinderGeometry(NOSE_R, NOSE_R, 2.0, 24, 1, true, arc0, arcL), glassM, ncx, 1.3, ncz)
     const SIDE_L = ncz - bcz // the side glass runs back only as far as the back wall
     put(new THREE.PlaneGeometry(SIDE_L, 2.0), glassM, SIDE_X, 1.3, ncz - SIDE_L / 2, Math.PI / 2)
     // base, sill and the dark band above the glass, following the same outline
     const baseM = flat('#4c2018'), band = flat('#203a2f'), trimM = flat('#a8a48e')
     const baseArc = flat('#4c2018', { side: THREE.DoubleSide }), bandArc = flat('#203a2f', { side: THREE.DoubleSide })
-    putA(new THREE.BoxGeometry(LEN, 0.3, 0.12), baseM, LEN / 2, 0, 0.15)
-    putA(new THREE.BoxGeometry(LEN, 0.04, 0.14), trimM, LEN / 2, 0, 0.31)
-    putA(new THREE.BoxGeometry(LEN, 0.42, 0.14), band, LEN / 2, 0, 2.51)
+    putA(new THREE.BoxGeometry(RUN, 0.3, 0.12), baseM, RUN_MID, 0, 0.15)
+    putA(new THREE.BoxGeometry(RUN, 0.04, 0.14), trimM, RUN_MID, 0, 0.31)
+    putA(new THREE.BoxGeometry(RUN, 0.42, 0.14), band, RUN_MID, 0, 2.51)
+    // end wall at the far-left end: closes the interior between the glass and the back wall
+    putA(new THREE.PlaneGeometry(BACK_OFF, 2.72), flat('#9c8f5e', { side: THREE.DoubleSide }), S_L, BACK_OFF / 2, 1.36, PHI + Math.PI / 2)
+    putA(new THREE.BoxGeometry(0.1, 2.72, 0.14), band, S_L - 0.02, 0, 1.36)
     put(new THREE.CylinderGeometry(NOSE_R + 0.02, NOSE_R + 0.02, 0.3, 24, 1, true, arc0, arcL), baseArc, ncx, 0.15, ncz)
     put(new THREE.CylinderGeometry(NOSE_R + 0.03, NOSE_R + 0.03, 0.42, 24, 1, true, arc0, arcL), bandArc, ncx, 2.51, ncz)
     put(new THREE.BoxGeometry(0.14, 0.3, SIDE_L), baseM, SIDE_X, 0.15, ncz - SIDE_L / 2)
@@ -3206,18 +3368,43 @@ async function init() {
     brick.map.wrapS = brick.map.wrapT = THREE.RepeatWrapping
     brick.map.repeat.set(5, 2.5)
     putA(new THREE.PlaneGeometry(16, 7.2), brick, LEN / 2 - 1.5, 0.35, 6.32)
-    put(new THREE.PlaneGeometry(9, 7.2), brick, SIDE_X + 0.35, 6.32, ncz - 4.2, Math.PI / 2)
-    const facadeGlow = putA(new THREE.PlaneGeometry(9, 1.6), glow('rgba(214,232,160,0.35)'), LEN / 2 + 0.3, 0.33, 3.2)
+    const brickSide = brick.clone()
+    brickSide.map = brick.map.clone()
+    brickSide.map.repeat.set((5 * 9) / 16, 2.5)
+    put(new THREE.PlaneGeometry(9, 7.2), brickSide, SIDE_X + 0.35, 6.32, ncz - 4.2, Math.PI / 2)
+    // window ledges and a cornice give the facade real depth
+    putA(new THREE.BoxGeometry(16, 0.12, 0.22), flat('#2b1410'), LEN / 2 - 1.5, 0.27, 2.86)
+    putA(new THREE.BoxGeometry(16, 0.22, 0.4), flat('#1a0c09'), LEN / 2 - 1.5, 0.2, 9.9)
+    // glow sits clearly in front of the upper windows (it used to share their plane and flicker)
+    const facadeGlow = putA(new THREE.PlaneGeometry(9, 1.6), glow('rgba(214,232,160,0.35)'), LEN / 2 + 0.3, 0.27, 3.2)
     const shadeM = [flat('#1f3326'), flat('#263d2c'), flat('#463a24')]
     for (let r = 0; r < 2; r++) for (let c = 0; c < 8; c++) {
       const s = -4.6 + c * 1.45, y = 3.9 + r * 1.55
       putA(new THREE.PlaneGeometry(0.72, 1.05), flat('#0b0807'), s, 0.33, y)
-      putA(new THREE.PlaneGeometry(0.72, 0.42 + ((c + r) % 3) * 0.08), shadeM[(c * 2 + r) % 3], s, 0.325, y + 0.32 - ((c + r) % 3) * 0.04)
+      putA(new THREE.PlaneGeometry(0.72, 0.42 + ((c + r) % 3) * 0.08), shadeM[(c * 2 + r) % 3], s, 0.31, y + 0.32 - ((c + r) % 3) * 0.04)
+      putA(new THREE.BoxGeometry(0.84, 0.05, 0.12), flat('#3a1a13'), s, 0.29, y - 0.55)
     }
     // dark shopfronts down the street to the left, catching a little of the diner's light
-    putA(new THREE.PlaneGeometry(7.6, 2.7), flat('#141712'), -4.0, 0.55, 1.35)
+    putA(new THREE.PlaneGeometry(7.2, 2.7), flat('#141712'), S_L - 3.6, 0.55, 1.35)
     for (const [s, c] of [[-6.4, '#1d3328'], [-4.2, '#24392c'], [-2.0, '#2c4434']]) putA(new THREE.PlaneGeometry(1.7, 1.4), flat(c), s, 0.54, 1.25)
     put(new THREE.BoxGeometry(6, 10, 6), flat('#15110e'), SIDE_X + 4.2, 5, ncz - 7)
+    // the street: lane dashes, a lamp post on the near curb, a hydrant by the diner
+    const dashM = flat('#3d3e36')
+    for (let i = 0; i < 7; i++) putA(new THREE.PlaneGeometry(0.9, 0.08), dashM, -5 + i * 2.2, -4.4, 0.01, PHI, -Math.PI / 2)
+    const poleM = flat('#1b1d1c')
+    const [lx, lz] = at(-2.2, -2.15)
+    put(new THREE.CylinderGeometry(0.05, 0.07, 3.6, 10), poleM, lx, 1.8, lz)
+    put(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 10), poleM, lx, 0.1, lz)
+    put(new THREE.BoxGeometry(0.06, 0.06, 0.6), poleM, lx, 3.55, lz - 0.28)
+    put(new THREE.ConeGeometry(0.2, 0.22, 12, 1, true), poleM, lx, 3.43, lz - 0.55)
+    put(new THREE.SphereGeometry(0.08, 12, 8), flat('#fff2c2'), lx, 3.36, lz - 0.55)
+    put(new THREE.PlaneGeometry(1.6, 1.6), glow('rgba(255,236,170,0.55)'), lx, 3.36, lz - 0.5)
+    put(new THREE.PlaneGeometry(3.2, 3.2), glow('rgba(255,236,170,0.22)'), lx, 0.02, lz - 0.4, 0, -Math.PI / 2)
+    const hydM = flat('#5b1d16')
+    const [hx, hz] = at(0.6, -1.85)
+    put(new THREE.CylinderGeometry(0.09, 0.1, 0.42, 12), hydM, hx, 0.33, hz)
+    put(new THREE.SphereGeometry(0.095, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hydM, hx, 0.54, hz)
+    put(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 8), hydM, hx, 0.4, hz, 0, Math.PI / 2)
 
     // living details: steam off the urns, a faint fluorescent shimmer, the waiter's rounds
     const steamMat = new THREE.SpriteMaterial({ map: canvasTex(64, 64, radialGlow('rgba(245,245,235,0.9)')), transparent: true, depthWrite: false, opacity: 0 })
@@ -3250,6 +3437,7 @@ async function init() {
   // Out the right window: a swirling night sky over a village, cypress in front.
   function starryNight() {
     const g = new THREE.Group()
+    g.name = 'Outside_StarryNight'
     scene.add(g)
     const RX = ROOM.r
     // the sky is a backdrop far wider and taller than any view through the window; the painted
@@ -3271,37 +3459,98 @@ async function init() {
         s.lineTo(u, base + Math.sin(u * 0.45 + seed) * amp + Math.sin(u * 1.3 + seed * 2) * amp * 0.35)
       }
       s.lineTo(U1, -16)
-      const m = new THREE.Mesh(new THREE.ShapeGeometry(s), flat(color))
+      // extruded away from the room so each ridge is a solid landform, not a cut-out
+      const geo = new THREE.ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: false, curveSegments: 4 })
+      geo.translate(0, 0, -1.6)
+      const m = new THREE.Mesh(geo, flat(color))
       m.position.set(x, 0, WIN.z)
       m.rotation.y = -Math.PI / 2
       g.add(m)
     }
     hills(RX + 13, '#1a2c46', 0.4, 0.45, 1.3)
     hills(RX + 10.5, '#132239', -0.4, 0.3, 4.1)
-    // village
-    const houseM = flat('#1c2b3e'), roofM = flat('#243651'), lit = flat('#f2c94c')
-    const houses = [[-2.6, 0.5], [-1.7, 0.4], [-0.8, 0.55], [0.4, 0.45], [1.3, 0.5], [2.2, 0.4], [3.1, 0.55], [-3.5, 0.4]]
-    houses.forEach(([dz, hh], i) => {
-      const x = RX + 9.4 + (i % 3) * 0.35
-      const yb = -0.75
-      const hb = new THREE.Mesh(new THREE.BoxGeometry(0.5, hh, 0.6), houseM)
-      hb.position.set(x, yb + hh / 2, WIN.z + dz)
+    // rolling ground from just outside the window back to the village, a real heightfield so the
+    // view shifts with you; u runs along the wall (world z - WIN.z), d is the distance out from it
+    const groundH = (d, u) => -1.65 + 0.095 * d + 0.16 * Math.sin(u * 0.62 + d * 0.48) + 0.07 * Math.sin(u * 1.7 - d * 1.1)
+    {
+      const D0 = 1.5, D1 = 11.2, U0 = -16, segD = 48, segU = 96
+      const geo = new THREE.PlaneGeometry(D1 - D0, U1 - U0, segD, segU)
+      const pos = geo.attributes.position, col = new Float32Array(pos.count * 3)
+      const cA = new THREE.Color('#0f1d33'), cB = new THREE.Color('#1d3350'), cC = new THREE.Color('#22404a'), c = new THREE.Color()
+      for (let i = 0; i < pos.count; i++) {
+        const d = pos.getX(i) + (D0 + D1) / 2, u = pos.getY(i) + (U0 + U1) / 2
+        pos.setXYZ(i, RX + d, groundH(d, u), WIN.z + u)
+        // painterly brush bands: colour follows the slope's swirl rather than plain height
+        const k = 0.5 + 0.5 * Math.sin(u * 2.3 + d * 0.9 + Math.sin(d * 1.7) * 1.4)
+        c.copy(cA).lerp(cB, k).lerp(cC, Math.max(0, Math.sin(u * 0.8 - d * 0.6)) * 0.35)
+        col.set([c.r, c.g, c.b], i * 3)
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+      geo.computeVertexNormals()
+      g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide })))
+    }
+    // village: gabled houses scattered over the slope at different depths, lit windows facing the room
+    const houseM = flat('#1c2b3e'), houseM2 = flat('#22334a'), roofM = flat('#243651'), roofM2 = flat('#2c3f5e'), lit = flat('#f2c94c'), chimM = flat('#16202f')
+    const gable = (w, d, rise) => {
+      const sh = new THREE.Shape([new THREE.Vector2(-w / 2 - 0.05, 0), new THREE.Vector2(w / 2 + 0.05, 0), new THREE.Vector2(0, rise)])
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: d + 0.1, bevelEnabled: false })
+      geo.translate(0, 0, -(d + 0.1) / 2)
+      return geo
+    }
+    const house = (d, u, w, hh, dep, i) => {
+      const x = RX + d, z = WIN.z + u, yb = groundH(d, u) - 0.05
+      const hb = new THREE.Mesh(new THREE.BoxGeometry(dep, hh, w), i % 2 ? houseM : houseM2)
+      hb.position.set(x, yb + hh / 2, z)
       g.add(hb)
-      const rf = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.3, 4), roofM)
-      rf.position.set(x, yb + hh + 0.15, WIN.z + dz)
-      rf.rotation.y = Math.PI / 4
+      const rf = new THREE.Mesh(gable(dep, w, 0.26 + (i % 3) * 0.05), i % 3 ? roofM : roofM2)
+      rf.position.set(x, yb + hh, z)
       g.add(rf)
-      const wdw = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.09), lit)
-      wdw.position.set(x - 0.26, yb + hh * 0.5, WIN.z + dz + (i % 2 ? 0.12 : -0.1))
-      wdw.rotation.y = -Math.PI / 2
-      g.add(wdw)
-    })
-    const church = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.45), houseM)
-    church.position.set(RX + 9.8, -0.4, WIN.z + 0.9)
-    g.add(church)
-    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.14, 1.5, 8), roofM)
-    spire.position.set(RX + 9.8, 0.7, WIN.z + 0.9)
-    g.add(spire)
+      if (i % 2) {
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, 0.07), chimM)
+        ch.position.set(x + dep * 0.15, yb + hh + 0.18, z + w * 0.25)
+        g.add(ch)
+      }
+      for (let k = 0; k < 1 + (w > 0.6 ? 1 : 0); k++) {
+        const wdw = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.1), lit)
+        wdw.position.set(x - dep / 2 - 0.006, yb + hh * (0.45 + (k % 2) * 0.12), z + (k ? -0.16 : 0.14) * (i % 2 ? 1 : -1))
+        wdw.rotation.y = -Math.PI / 2
+        g.add(wdw)
+      }
+    }
+    const HOUSES = [[9.4, -3.5, 0.6, 0.4], [9.75, -2.6, 0.55, 0.5], [9.4, -1.7, 0.5, 0.4], [10.1, -0.8, 0.6, 0.55], [9.4, 0.4, 0.55, 0.45],
+      [9.75, 1.3, 0.6, 0.5], [10.1, 2.2, 0.5, 0.4], [9.4, 3.1, 0.6, 0.55], [8.4, -2.2, 0.5, 0.36], [8.1, 1.9, 0.55, 0.38],
+      [8.7, -0.2, 0.45, 0.34], [10.6, -2.0, 0.5, 0.42], [10.7, 1.6, 0.55, 0.45], [7.6, 3.6, 0.5, 0.34], [7.4, -3.9, 0.55, 0.36], [10.4, 3.9, 0.5, 0.4]]
+    HOUSES.forEach(([d, u, w, hh], i) => house(d, u, w, hh, 0.5, i))
+    // the church: nave, tower and a tall spire that breaks the hill line, as in the painting
+    {
+      const d = 9.8, u = 0.9, x = RX + d, z = WIN.z + u, yb = groundH(d, u) - 0.05
+      const nave = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.9), houseM)
+      nave.position.set(x + 0.1, yb + 0.3, z + 0.2)
+      g.add(nave)
+      const nr = new THREE.Mesh(gable(0.6, 0.9, 0.3), roofM)
+      nr.position.set(x + 0.1, yb + 0.6, z + 0.2)
+      g.add(nr)
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.1, 0.32), houseM2)
+      tower.position.set(x, yb + 0.55, z - 0.35)
+      g.add(tower)
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.4, 8), roofM)
+      spire.position.set(x, yb + 1.1 + 0.7, z - 0.35)
+      g.add(spire)
+      const cw = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.14), lit)
+      cw.position.set(x - 0.167, yb + 0.75, z - 0.35)
+      cw.rotation.y = -Math.PI / 2
+      g.add(cw)
+    }
+    // dark olive shrubs dotted over the near slope
+    const shrubM = [flat('#0d1a1c'), flat('#112426'), flat('#0b1620')]
+    for (let i = 0; i < 26; i++) {
+      const d = 3 + ((i * 37) % 50) / 10, u = -9 + ((i * 53) % 170) / 10
+      const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18 + (i % 4) * 0.05, 0), shrubM[i % 3])
+      sh.position.set(RX + d, groundH(d, u) + 0.08, WIN.z + u)
+      sh.scale.y = 0.7
+      sh.rotation.set(i, i * 2, 0)
+      g.add(sh)
+    }
     // cypress: stacked flame-shaped lathes that sway
     const cypress = new THREE.Group()
     cypress.position.set(RX + 3.4, -2.8, WIN.z - 1.05)
@@ -3985,10 +4234,11 @@ function drawField(g, w, h) {
 // dark red-brown brick with soot-dark mortar, for the building over the diner
 function drawBrick(g, w, h) {
   g.fillStyle = '#1c0e0b'; g.fillRect(0, 0, w, h)
-  const bw = 64, bh = 22
-  for (let r = 0; r * bh < h; r++) for (let c = -1; c * bw < w; c++) {
+  // whole numbers of bricks across and down (an even row count) so the texture repeats without seams
+  const cols = 8, rows = 24, bw = w / cols, bh = h / rows
+  for (let r = 0; r < rows; r++) for (let c = -1; c < cols; c++) {
     const x = c * bw + (r % 2 ? bw / 2 : 0), y = r * bh
-    const k = ((r * 7 + c * 13) % 5) / 5
+    const k = ((r * 7 + (((c % cols) + cols) % cols) * 13) % 5) / 5
     g.fillStyle = `rgb(${54 + k * 12},${24 + k * 5},${19 + k * 4})`
     g.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3)
   }
