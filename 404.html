@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Walker Birchfield</title>
+  <script>
+    // GitHub Pages serves this page for any path it has no file for (/explore, /workspace, /app/about...).
+    // Keep the path and hand over to the site, which restores it before anything else loads.
+    ;(function(){
+      var p=location.pathname+location.search+location.hash
+      try{sessionStorage.setItem('wos_path',p)}catch(e){}
+      location.replace('/')
+    })()
+  </script>
+  <meta http-equiv="refresh" content="0; url=/" />
+</head>
+<body style="background:#07070d"></body>
+</html>
