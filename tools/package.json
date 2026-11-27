@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "export-landing": "node export-landing.mjs"
+    "export-landing": "node export-landing.mjs",
+    "lawlibrary": "node build-lawlibrary.mjs"
   },
   "devDependencies": {
+    "marked": "^15.0.12",
     "three": "0.160.0"
   }
 }

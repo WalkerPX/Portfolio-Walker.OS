@@ -2,393 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Walker&rsquo;s Law Library</title>
-  <meta name="description" content="A collection of case briefs and other supporting documents used throughout law school." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Walker's Law Library</title>
+  <meta name="description" content="Walker's law school notes, case briefs and outlines, mapped as orbiting course systems." />
   <meta property="og:title" content="Walker's Law Library" />
-  <meta property="og:description" content="A collection of case briefs and other supporting documents used throughout law school." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="../assets/WLogoPFP.png" />
-  <link rel="apple-touch-icon" href="../assets/WLogoPFP.png" />
+  <meta name="theme-color" content="#040405" />
+  <!-- One shell serves /lawlibrary/, /lawlibrary/<course>/ and /lawlibrary/<course>/<note>/.
+       tools/build-lawlibrary.mjs copies it into each course and note folder; edit this file, then rebuild. -->
+  <link rel="icon" href="/assets/WLogoPFP.png" />
+  <link rel="apple-touch-icon" href="/assets/WLogoPFP.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
-
-  <style>
-    /* ===== TOKENS — professional instance (ink + gold) ===== */
-    :root{
-      --bg-deep:#070809;
-      --bg-surface:#0e1013;
-      --bg-elevated:#15181d;
-      --accent:#d9b96a;
-      --accent-dim:#c9a227;
-      --accent-rgb:201,162,39;
-      --tint-rgb:201,162,39;
-      --text:#f4f1e9;
-      --text-dim:#cdc7b8;
-      --text-muted:#8d8778;
-      --border:rgba(201,162,39,.16);
-      --border-strong:rgba(201,162,39,.3);
-      --font-ui:'JetBrains Mono',monospace;
-      --font-body:'Inter',sans-serif;
-      --font-serif:'Iowan Old Style',Georgia,'Times New Roman',serif;
-      --radius-sm:6px;
-      --radius-md:10px;
-      --radius-lg:14px;
-      --ease:cubic-bezier(0.16,1,0.3,1);
-    }
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html{scroll-behavior:smooth}
-    body{
-      min-height:100vh;background:var(--bg-deep);color:var(--text);
-      font-family:var(--font-body);-webkit-font-smoothing:antialiased;
-      overflow-x:hidden
-    }
-
-    /* ===== SAME BACKGROUND AS THE PORTFOLIO DESKTOP ===== */
-    .wp{position:fixed;inset:0;z-index:-2;
-      background:
-        radial-gradient(ellipse at 22% 26%,rgba(201,162,39,.055) 0%,transparent 52%),
-        radial-gradient(ellipse at 74% 72%,rgba(126,146,178,.045) 0%,transparent 44%),
-        linear-gradient(165deg,#06070a,#0a0c11 25%,#0d1016 52%,#0a0c11 76%,#06070a)
-    }
-    .grid{position:fixed;inset:0;z-index:-1;
-      background-image:
-        linear-gradient(rgba(201,162,39,.035) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(201,162,39,.035) 1px,transparent 1px);
-      background-size:60px 60px
-    }
-    /* CRT vignette, same feel as the OS */
-    .crt{position:fixed;inset:0;pointer-events:none;z-index:9}
-    .crt::before{content:'';position:absolute;inset:0;
-      background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.02) 2px,rgba(0,0,0,.02) 4px)}
-    .crt::after{content:'';position:absolute;inset:0;
-      background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.5) 100%)}
-
-    /* ===== RETURN-TO-PORTFOLIO LOGO (top left) ===== */
-    .home{
-      position:fixed;top:16px;left:16px;z-index:60;
-      width:44px;height:44px;border-radius:50%;
-      display:flex;align-items:center;justify-content:center;
-      text-decoration:none;outline:none;
-      transition:transform .2s var(--ease)
-    }
-    .home img{
-      width:40px;height:40px;object-fit:contain;
-      filter:drop-shadow(0 0 0 rgba(var(--accent-rgb),0));
-      transition:filter .25s ease,transform .2s var(--ease)
-    }
-    .home:hover img,.home:focus-visible img{
-      transform:scale(1.04);
-      filter:drop-shadow(0 0 8px rgba(217,185,106,.55)) drop-shadow(0 0 20px rgba(217,185,106,.3))
-    }
-    .home-tip{
-      position:absolute;top:calc(100% + 8px);left:0;
-      width:max-content;padding:7px 11px;border-radius:var(--radius-sm);
-      background:rgba(12,14,18,.96);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-      border:1px solid var(--border);box-shadow:0 10px 26px rgba(0,0,0,.5);
-      opacity:0;transform:translateY(-4px);pointer-events:none;
-      transition:opacity .18s ease,transform .18s ease;
-      text-align:left
-    }
-    .home:hover .home-tip,.home:focus-visible .home-tip{opacity:1;transform:translateY(0)}
-    .home-tip b{display:block;font:500 10px/1.4 var(--font-ui);color:var(--accent);letter-spacing:.4px;text-transform:uppercase}
-
-    /* ===== LAYOUT ===== */
-    main{position:relative;z-index:2;max-width:860px;margin:0;padding:0 24px 90px max(48px,6vw)}
-
-    /* Title block — centred on the page, independent of the left-shifted list */
-    .hero{position:relative;z-index:2;max-width:900px;margin:0 auto;padding:54px 24px 22px;
-      text-align:center;animation:rise .7s var(--ease) both}
-    .hero h1{
-      font-family:var(--font-serif);font-size:clamp(28px,5vw,42px);font-weight:600;
-      letter-spacing:-.4px;line-height:1.15;color:var(--text)
-    }
-    /* very slight shimmer sweeping across the lettering */
-    @supports ((-webkit-background-clip:text) or (background-clip:text)){
-      .hero h1{
-        background:linear-gradient(100deg,#f4f1e9 0%,#f4f1e9 38%,#fffaec 48%,#fff6df 52%,#f4f1e9 62%,#f4f1e9 100%);
-        background-size:260% 100%;
-        -webkit-background-clip:text;background-clip:text;
-        -webkit-text-fill-color:transparent;color:transparent;
-        animation:shimmer 11s ease-in-out infinite
-      }
-    }
-    @keyframes shimmer{
-      0%{background-position:135% 0}
-      45%,100%{background-position:-35% 0}
-    }
-    .hero .sub{
-      margin:12px auto 0;max-width:560px;
-      font-family:var(--font-serif);font-style:italic;font-size:14px;line-height:1.65;
-      color:var(--text-dim)
-    }
-    .hero .rule{
-      width:74px;height:1px;margin:22px auto 0;
-      background:linear-gradient(90deg,transparent,var(--border-strong),transparent)
-    }
-    @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-
-    /* ===== TERM DROPDOWN (e.g. 1L Fall) ===== */
-    .term{
-      border:1px solid var(--border);border-radius:var(--radius-md);
-      background:rgba(255,255,255,.012);overflow:hidden
-    }
-    .term>summary{
-      list-style:none;cursor:pointer;user-select:none;
-      display:flex;align-items:center;gap:10px;
-      padding:13px 15px;
-      background:rgba(var(--accent-rgb),.05);
-      font:500 11px/1 var(--font-ui);letter-spacing:1.8px;text-transform:uppercase;
-      color:var(--accent);
-      transition:background .16s ease,color .16s ease
-    }
-    .term>summary::-webkit-details-marker{display:none}
-    .term>summary:hover{background:rgba(var(--accent-rgb),.09);color:var(--text)}
-    .term>summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
-    .term[open]>summary{border-bottom:1px solid rgba(var(--accent-rgb),.14)}
-    .term .tcv{width:14px;height:14px;flex-shrink:0;position:relative;transition:transform .22s var(--ease)}
-    .term .tcv::before,.term .tcv::after{
-      content:'';position:absolute;left:50%;top:50%;background:currentColor;border-radius:1px;
-      transform:translate(-50%,-50%);opacity:.7
-    }
-    .term .tcv::before{width:10px;height:1.5px}
-    .term .tcv::after{width:1.5px;height:10px;transition:opacity .2s ease}
-    .term[open] .tcv::after{opacity:0}
-    .term .tmeta{
-      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;
-      text-transform:none;color:var(--text-muted)
-    }
-    .term .tmeta b{color:var(--accent);font-weight:500}
-    .term-body{padding:20px 16px 4px}
-
-    /* ===== CLASS SECTIONS ===== */
-    .cls{
-      border:1px solid rgba(var(--accent-rgb),.1);
-      background:rgba(255,255,255,.012);
-      border-radius:var(--radius-md);margin-bottom:9px;overflow:hidden;
-      transition:border-color .18s ease,background .18s ease
-    }
-    .cls:last-child{margin-bottom:22px}
-    .cls:hover{border-color:rgba(var(--accent-rgb),.2);background:rgba(255,255,255,.022)}
-    .cls[open]{border-color:rgba(var(--accent-rgb),.22);background:rgba(255,255,255,.025)}
-
-    .cls>summary{
-      list-style:none;cursor:pointer;user-select:none;
-      display:flex;align-items:center;gap:12px;
-      padding:13px 16px;transition:background .16s ease
-    }
-    .cls>summary::-webkit-details-marker{display:none}
-    .cls>summary:hover{background:rgba(var(--accent-rgb),.05)}
-    .cls>summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
-    .cls[open]>summary{border-bottom:1px solid rgba(var(--accent-rgb),.12)}
-    .cls>summary h2{
-      font-family:var(--font-serif);font-size:21px;font-weight:600;letter-spacing:-.2px;
-      color:var(--text);flex-shrink:0
-    }
-    .cls .cmeta{
-      margin-left:auto;font:10px/1 var(--font-ui);letter-spacing:.6px;
-      color:var(--text-muted);text-transform:uppercase;text-align:right
-    }
-    .cls .cmeta b{color:var(--accent);font-weight:500}
-    .cls-body{padding:12px 14px 14px}
-
-    /* ===== CHAPTER ACCORDIONS ===== */
-    .ch{
-      border:1px solid rgba(var(--accent-rgb),.1);
-      background:rgba(255,255,255,.012);
-      border-radius:var(--radius-md);margin-bottom:7px;overflow:hidden;
-      transition:border-color .18s ease,background .18s ease
-    }
-    .ch:hover{border-color:rgba(var(--accent-rgb),.2);background:rgba(255,255,255,.022)}
-    .ch[open]{border-color:rgba(var(--accent-rgb),.24);background:rgba(255,255,255,.025)}
-
-    .ch summary{
-      list-style:none;cursor:pointer;user-select:none;
-      display:flex;align-items:center;gap:12px;
-      padding:11px 14px;
-      font:12px/1.3 var(--font-ui);color:var(--text-dim);
-      transition:color .15s ease
-    }
-    .ch summary::-webkit-details-marker{display:none}
-    .ch summary:hover{color:var(--text)}
-    .ch summary:focus-visible{outline:1px solid var(--border-strong);outline-offset:-2px}
-    .ch .num{
-      font:10px/1 var(--font-ui);letter-spacing:1px;color:var(--accent);opacity:.65;flex-shrink:0;
-      min-width:22px
-    }
-    .ch .num.tag{letter-spacing:.5px;min-width:46px;opacity:.8}
-    .ch .pg{font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.3px;flex-shrink:0;opacity:.8}
-    .ch .name{font-family:var(--font-body);font-size:13px;font-weight:500;color:inherit;flex:1;min-width:0}
-    .ch .cnt{
-      font:10px/1 var(--font-ui);color:var(--text-muted);letter-spacing:.4px;flex-shrink:0
-    }
-    .cv{
-      width:14px;height:14px;flex-shrink:0;position:relative;
-      transition:transform .2s var(--ease)
-    }
-    .cv::before,.cv::after{
-      content:'';position:absolute;left:50%;top:50%;background:currentColor;border-radius:1px;
-      transform:translate(-50%,-50%);opacity:.55
-    }
-    .cv::before{width:10px;height:1.5px}
-    .cv::after{width:1.5px;height:10px;transition:opacity .2s ease}
-    .ch[open]>summary .cv::after,.cls[open]>summary .cv::after{opacity:0}
-
-    .ch-body{padding:2px 14px 13px 48px}
-    .briefs{list-style:none;display:flex;flex-direction:column;gap:5px}
-    .briefs li{position:relative}
-    .brief{
-      display:flex;align-items:center;gap:9px;
-      padding:7px 10px;border-radius:var(--radius-sm);
-      border:1px solid rgba(var(--accent-rgb),.08);
-      background:rgba(255,255,255,.015);
-      text-decoration:none;color:var(--text-dim);
-      transition:all .16s ease
-    }
-    .brief:hover{
-      border-color:rgba(var(--accent-rgb),.28);background:rgba(var(--accent-rgb),.07);
-      color:var(--text);transform:translateX(2px)
-    }
-    .brief .ic{font-size:11px;opacity:.65;flex-shrink:0}
-    .brief .nm{font-size:12.5px;font-weight:500;line-height:1.4}
-    .brief .ci{
-      margin-left:auto;font:10px/1 var(--font-ui);color:var(--text-muted);
-      letter-spacing:.3px;flex-shrink:0;padding-left:10px
-    }
-    .pending{
-      display:flex;align-items:center;gap:9px;padding:7px 10px;
-      font:11px/1.5 var(--font-ui);color:var(--text-muted);letter-spacing:.2px;opacity:.75
-    }
-    .pending .dot{width:4px;height:4px;border-radius:50%;background:var(--text-muted);opacity:.6;flex-shrink:0}
-
-    /* ===== MOBILE ===== */
-    @media(max-width:640px){
-      .grid{background-size:40px 40px}
-      main{padding:0 16px 72px}
-      .hero{padding:64px 16px 18px}
-      .hero .sub{font-size:13px}
-      .home{top:12px;left:12px}
-      .cls>summary{padding:12px 14px;gap:10px;flex-wrap:wrap}
-      .cls>summary h2{font-size:19px}
-      .cls .cmeta{margin-left:0;width:100%;text-align:left;order:3}
-      .cls-body{padding:10px 10px 12px}
-      .ch summary{padding:10px 12px;gap:9px}
-      .ch .pg{display:none}
-      .ch-body{padding:2px 12px 12px 12px}
-      .brief .ci{display:none}
-      .term-body{padding:14px 10px 4px}
-    }
-    @media (prefers-reduced-motion:reduce){
-      *{animation:none!important;transition:none!important}
-    }
-  </style>
-  <link rel="stylesheet" href="../polish.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/lawlibrary/app.css" />
 </head>
 <body>
+  <canvas id="sky" aria-hidden="true"></canvas>
 
-<div class="wp"></div>
-<div class="grid"></div>
-<div class="crt"></div>
+  <header class="top">
+    <div class="top-l">
+      <a class="home" href="/?mode=professional&amp;open=work" title="Back to the portfolio">
+        <img src="/assets/WLogoPFP.png" alt="" width="26" height="26" />
+      </a>
+      <a class="brand" href="/lawlibrary/">Walker&rsquo;s Law Library</a>
+    </div>
+    <nav class="crumbs" id="crumbs" aria-label="Orbit"></nav>
+    <div class="top-r">
+      <div class="search">
+        <input id="q" type="search" placeholder="Search notes" autocomplete="off" spellcheck="false" aria-label="Search notes" />
+        <kbd>/</kbd>
+        <ul id="sugg" class="sugg" role="listbox" hidden></ul>
+      </div>
+    </div>
+  </header>
 
-<!-- Return to the portfolio: relaunches Walker.OS and lands on Professional Works -->
-<a class="home" href="../index.html?mode=professional&amp;open=work" title="Back to the portfolio website">
-  <img src="../assets/WLogoPFP.png" alt="Walker Birchfield — back to portfolio" />
-  <span class="home-tip">
-    <b>Back to Portfolio</b>
-  </span>
-</a>
+  <aside class="legend" id="legend" aria-label="Orbits"></aside>
+  <div class="hint" id="hint"></div>
+  <div class="tip" id="tip" hidden></div>
 
-<header class="hero">
-  <h1>Walker&rsquo;s Law Library</h1>
-  <p class="sub">A collection of case briefs and other supporting documents used throughout law school.</p>
-  <div class="rule"></div>
-</header>
+  <section class="reader" id="reader" role="dialog" aria-label="Note" hidden>
+    <div class="rbar" id="rbar">
+      <button type="button" class="rbtn" id="rBack" title="Back" aria-label="Back" disabled>&#8249;</button>
+      <div class="rpath" id="rPath"></div>
+      <a class="rbtn rnew" id="rNew" href="#" target="_blank" rel="noopener" title="Open this note at its own address">Open in new tab <span aria-hidden="true">&#8599;</span></a>
+      <button type="button" class="rbtn" id="rClose" title="Close (Esc)" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="rscroll" id="rScroll">
+      <article class="doc" id="doc"></article>
+    </div>
+  </section>
 
-<main>
-  <div id="classes"></div>
-</main>
-
-<script src="briefs-data.js"></script>
-<script>
-  ;(() => {
-    const DATA = window.LAW_LIBRARY || [];
-    const root = document.getElementById('classes');
-
-    const esc = s => String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    const pad = n => String(n).padStart(2, '0');
-
-    function briefRow(c) {
-      const name = esc(c.name);
-      const cite = c.cite ? esc(c.cite) : '';
-      if (c.file) {
-        return `<li><a class="brief" href="${esc(c.file)}" target="_blank" rel="noopener">
-            <span class="ic">PDF</span><span class="nm">${name}</span>
-            ${cite ? `<span class="ci">${cite}</span>` : ''}
-          </a></li>`;
-      }
-      return `<li><div class="pending"><span class="dot"></span>
-          <span class="nm">${name}</span>${cite ? `<span class="ci">${cite}</span>` : ''}
-        </div></li>`;
-    }
-
-    function chapter(ch, i) {
-      const cases = (ch.cases || []).filter(c => c && c.name);
-      const count = cases.length;
-      const body = count
-        ? `<ul class="briefs">${cases.map(briefRow).join('')}</ul>`
-        : `<div class="pending"><span class="dot"></span>No briefs added yet.</div>`;
-      const label = ch.tag
-        ? `<span class="num tag">${esc(ch.tag)}</span>`
-        : `<span class="num">${pad(i + 1)}</span>`;
-      return `<details class="ch">
-          <summary>
-            ${label}
-            <span class="name">${esc(ch.title)}</span>
-            ${ch.pages ? `<span class="pg">pp. ${esc(ch.pages)}</span>` : ''}
-            <span class="cnt">${count ? count + (count === 1 ? ' brief' : ' briefs') : ''}</span>
-            <span class="cv"></span>
-          </summary>
-          <div class="ch-body">${body}</div>
-        </details>`;
-    }
-
-    function section(cls, i) {
-      const chapters = cls.chapters || [];
-      const total = chapters.reduce((n, ch) => n + (ch.cases || []).filter(c => c && c.name).length, 0);
-      const course = [cls.code, cls.teacher].filter(Boolean).join(' &middot; ');
-      return `<details class="cls" id="${esc(cls.id || 'class-' + i)}" open>
-          <summary>
-            <h2>${esc(cls.name)}</h2>
-            <span class="cmeta">${course ? course + ' &middot; ' : ''}${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; <b>${total}</b> brief${total === 1 ? '' : 's'}</span>
-            <span class="cv"></span>
-          </summary>
-          <div class="cls-body">${chapters.map(chapter).join('')}</div>
-        </details>`;
-    }
-
-    function term(t, i) {
-      const classes = t.classes || [];
-      const chapters = classes.reduce((n, c) => n + (c.chapters || []).length, 0);
-      const briefs = classes.reduce((n, c) => n + (c.chapters || [])
-        .reduce((m, ch) => m + (ch.cases || []).filter(x => x && x.name).length, 0), 0);
-      return `<details class="term" id="${esc(t.id || 'term-' + i)}" open>
-          <summary>
-            <span class="tcv"></span>
-            <span>${esc(t.name)}</span>
-            <span class="tmeta">${classes.length} class${classes.length === 1 ? '' : 'es'} &middot; ${chapters} chapters &middot; <b>${briefs}</b> brief${briefs === 1 ? '' : 's'}</span>
-          </summary>
-          <div class="term-body">${classes.map(section).join('')}</div>
-        </details>`;
-    }
-
-    root.innerHTML = DATA.length
-      ? DATA.map(term).join('')
-      : `<div class="pending"><span class="dot"></span>Library data not found.</div>`;
-  })();
-</script>
+  <noscript><p class="nojs">Walker&rsquo;s Law Library needs JavaScript to draw its orbits.</p></noscript>
+  <script src="/lawlibrary/app.js" defer></script>
 </body>
 </html>
